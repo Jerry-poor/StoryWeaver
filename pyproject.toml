@@ -1,0 +1,11 @@
+[project]
+name = "storyweaver"
+version = "0.1.0"
+description = "A JSON-based Novel Agent Workbench using DeepSeek API"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
