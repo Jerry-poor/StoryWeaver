@@ -17,10 +17,19 @@
 
 ## 运行
 
-```bash
-cd chat
-python app.py
-```
+### 启动后端服务
+
+您可以使用以下两种方式之一运行服务：
+
+1. **直接启动新后端主模块 (推荐)**：
+   ```bash
+   python3 backend/main.py
+   ```
+
+2. **使用兼容入口启动**：
+   ```bash
+   python3 app.py
+   ```
 
 浏览器打开：
 
@@ -28,23 +37,22 @@ python app.py
 http://127.0.0.1:8787
 ```
 
-## 环境变量
+## 项目结构 (前后端分离)
 
-- `DEEPSEEK_API_KEY`
-- `DEEPSEEK_BASE_URL`，默认 `https://api.deepseek.com/v1`
-- `DEEPSEEK_MODEL`，默认 `deepseek-chat`
-- `PORT`，默认 `8787`
+- `/frontend` - 存放独立的前端静态页面 (`index.html`)。
+- `/backend` - 存放后端 Python 代码，通过主模块 `main.py` 启动。
+  - `backend/app/` - 拆分出的模块化子功能包 (`config`, `storage`, `llm`, `agents`, `pipeline`, `handlers`)。
+- `app.py` - 根目录下的兼容性层，动态代理所有的旧方法调用并支持原命令启动。
 
-如果你使用本地的 OpenAI 兼容服务，也可以把 `DEEPSEEK_BASE_URL` 指向本地地址。
+## 运行单元测试
 
-## 真实测试
+可以通过以下命令执行所有的章节质量及接续性管道的自动化测试：
 
-运行一次真实环境的清理 + 生成 1 份大纲 + 5 章测试：
-
-```powershell
-cd chat
-.\run_real_test.ps1
+```bash
+python3 -m unittest test_chapter_quality.py
 ```
+
+## 环境变量
 
 ## 数据文件
 

@@ -1,0 +1,1865 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StoryWeaver — 你的AI创作伙伴</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&display=swap');
+
+    :root {
+      color-scheme: dark;
+      --bg: #111113;
+      --bg-elevated: #1a1a1f;
+      --bg-surface: #222228;
+      --bg-hover: #2a2a32;
+      --border: rgba(255,255,255,0.06);
+      --border-active: rgba(255,255,255,0.12);
+      --text: #f0ece4;
+      --text-secondary: #a09e96;
+      --text-muted: #6b6963;
+      --accent: #d4a053;
+      --accent-soft: rgba(212,160,83,0.12);
+      --accent-hover: #e0b46a;
+      --success: #6bcf8e;
+      --success-soft: rgba(107,207,142,0.12);
+      --danger: #e87070;
+      --danger-soft: rgba(232,112,112,0.12);
+      --info: #7eb8e0;
+      --info-soft: rgba(126,184,224,0.12);
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+      --shadow-md: 0 4px 16px rgba(0,0,0,0.3);
+      --shadow-lg: 0 8px 32px rgba(0,0,0,0.4);
+      --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      --font-sans: "SF Pro Display", "PingFang SC", "Microsoft YaHei", -apple-system, sans-serif;
+      --font-serif: "Noto Serif SC", "Songti SC", "SimSun", serif;
+      --font-mono: ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: -50%; left: -50%;
+      width: 200%; height: 200%;
+      background: radial-gradient(ellipse at 30% 20%, rgba(212,160,83,0.04) 0%, transparent 50%),
+                  radial-gradient(ellipse at 70% 80%, rgba(126,184,224,0.03) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+
+    .app-layout {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      grid-template-rows: 60px 1fr;
+      min-height: 100vh;
+      position: relative;
+      z-index: 1;
+    }
+
+    header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(17,17,19,0.85);
+      backdrop-filter: blur(20px) saturate(1.2);
+      z-index: 20;
+    }
+
+    .logo { display: flex; align-items: center; gap: 10px; }
+
+    .logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--accent), #c0883a);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      box-shadow: 0 2px 8px rgba(212,160,83,0.3);
+    }
+
+    .logo-text {
+      font-size: 18px; font-weight: 700; letter-spacing: -0.3px;
+      background: linear-gradient(135deg, var(--text), var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header-actions { display: flex; align-items: center; gap: 8px; }
+
+    .sidebar {
+      grid-row: 2;
+      border-right: 1px solid var(--border);
+      background: var(--bg-elevated);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-section { padding: 16px; }
+
+    .sidebar-label {
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 8px; padding: 0 8px;
+    }
+
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all var(--transition);
+      font-size: 14px;
+      color: var(--text-secondary);
+      border: 1px solid transparent;
+      user-select: none;
+    }
+
+    .nav-item:hover { background: var(--bg-hover); color: var(--text); }
+
+    .nav-item.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: rgba(212,160,83,0.15);
+    }
+
+    .nav-item .icon {
+      width: 20px; height: 20px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; flex-shrink: 0;
+    }
+
+    .nav-item .badge {
+      margin-left: auto;
+      font-size: 11px; padding: 2px 7px;
+      border-radius: 99px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .sidebar-divider { height: 1px; background: var(--border); margin: 4px 16px; }
+
+    .sidebar-actions {
+      margin-top: auto;
+      padding: 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .new-story-btn {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; padding: 10px 0;
+      border-radius: var(--radius-md);
+      border: 1px dashed var(--border);
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 13px; font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .new-story-btn:hover {
+      border-color: var(--danger);
+      color: var(--danger);
+      background: rgba(232,112,112,0.06);
+    }
+
+    .confirm-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200;
+      animation: fadeIn 0.15s ease;
+    }
+    .confirm-dialog {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+      max-width: 400px; width: 90%;
+      box-shadow: var(--shadow-lg);
+      animation: scaleIn 0.2s ease;
+    }
+    .confirm-dialog h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    .confirm-dialog p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 20px; }
+    .confirm-dialog .confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
+    .main-content {
+      grid-row: 2;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .content-header { padding: 24px 32px 0; }
+
+    .content-header h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+
+    .content-header .subtitle { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+
+    .content-body { padding: 20px 32px 32px; flex: 1; }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 9px 16px;
+      border-radius: var(--radius-md);
+      font-size: 13px; font-weight: 500;
+      font-family: var(--font-sans);
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all var(--transition);
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #c0883a);
+      color: #1a1a1f;
+      box-shadow: 0 2px 8px rgba(212,160,83,0.25);
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, var(--accent-hover), #d09a4a);
+      box-shadow: 0 4px 12px rgba(212,160,83,0.35);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary:active { transform: translateY(0); }
+
+    .btn-secondary {
+      background: var(--bg-surface);
+      color: var(--text);
+      border-color: var(--border-active);
+    }
+
+    .btn-secondary:hover { background: var(--bg-hover); border-color: rgba(255,255,255,0.18); }
+
+    .btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
+    .btn-ghost:hover { background: var(--bg-hover); color: var(--text); }
+
+    .btn-danger { background: var(--danger-soft); color: var(--danger); border-color: rgba(232,112,112,0.2); }
+    .btn-danger:hover { background: rgba(232,112,112,0.2); }
+
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+
+    .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: var(--radius-sm); }
+
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+
+    .form-label { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+
+    .form-hint { font-size: 12px; color: var(--text-muted); }
+
+    textarea, input[type="text"], input[type="number"], select {
+      width: 100%;
+      background: var(--bg-surface);
+      color: var(--text);
+      border: 1px solid var(--border-active);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      font: inherit; font-size: 14px;
+      transition: all var(--transition);
+      outline: none;
+    }
+
+    textarea:focus, input[type="text"]:focus, input[type="number"]:focus, select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    textarea { resize: vertical; line-height: 1.6; }
+    textarea::placeholder, input::placeholder { color: var(--text-muted); }
+
+    .card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-header h3 { font-size: 15px; font-weight: 600; }
+
+    .card-body { padding: 20px; }
+
+    .tab-bar {
+      display: flex; gap: 2px;
+      background: var(--bg-surface);
+      border-radius: var(--radius-md);
+      padding: 3px;
+      overflow-x: auto;
+    }
+
+    .tab-item {
+      padding: 7px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 13px; font-weight: 500;
+      cursor: pointer;
+      transition: all var(--transition);
+      color: var(--text-secondary);
+      border: none; background: transparent;
+      white-space: nowrap;
+      font-family: var(--font-sans);
+    }
+
+    .tab-item:hover { color: var(--text); }
+
+    .tab-item.active {
+      background: var(--bg-elevated);
+      color: var(--text);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 10px;
+      border-radius: 99px;
+      font-size: 11px; font-weight: 600;
+    }
+
+    .chip-success { background: var(--success-soft); color: var(--success); }
+    .chip-warning { background: var(--accent-soft); color: var(--accent); }
+    .chip-danger { background: var(--danger-soft); color: var(--danger); }
+    .chip-info { background: var(--info-soft); color: var(--info); }
+
+    .status-bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 16px;
+      border-radius: var(--radius-md);
+      font-size: 13px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .status-dot.active {
+      background: var(--success);
+      box-shadow: 0 0 8px rgba(107,207,142,0.4);
+      animation: pulse 2s infinite;
+    }
+
+    .status-dot.warning { background: var(--accent); }
+    .status-dot.error { background: var(--danger); }
+
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    .empty-state {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 48px 24px; text-align: center;
+    }
+
+    .empty-state .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+    .empty-state h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    .empty-state p { font-size: 14px; color: var(--text-muted); max-width: 320px; line-height: 1.5; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .stack { display: flex; flex-direction: column; gap: 16px; }
+    .row { display: flex; align-items: center; gap: 8px; }
+
+    .chapter-text {
+      font-family: var(--font-serif);
+      white-space: pre-wrap;
+      line-height: 2; font-size: 15px;
+      color: var(--text); letter-spacing: 0.3px;
+    }
+
+    .preview-section { margin-bottom: 16px; }
+
+    .preview-section-title {
+      font-size: 12px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text-muted); margin-bottom: 8px;
+    }
+
+    .preview-list { list-style: none; padding: 0; }
+    .preview-list li {
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px; line-height: 1.5;
+      color: var(--text-secondary);
+    }
+    .preview-list li:last-child { border-bottom: none; }
+
+    .character-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      transition: all var(--transition);
+    }
+
+    .character-card:hover { border-color: var(--border-active); }
+
+    .character-name { font-weight: 600; color: var(--accent); font-size: 14px; }
+    .character-role { font-size: 12px; color: var(--text-muted); margin-left: 6px; }
+    .character-detail { font-size: 12px; color: var(--text-secondary); margin-top: 6px; line-height: 1.5; }
+
+    .bubble {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 14px 16px;
+      background: var(--bg-surface);
+      transition: all var(--transition);
+    }
+
+    .bubble.user { border-color: rgba(212,160,83,0.2); background: var(--accent-soft); }
+    .bubble.assistant { border-color: rgba(126,184,224,0.2); background: var(--info-soft); }
+
+    .bubble .label {
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text-muted); margin-bottom: 8px;
+    }
+
+    .bubble pre {
+      margin: 0; white-space: pre-wrap; word-break: break-word;
+      font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
+      color: var(--text-secondary);
+    }
+
+    .stream-log {
+      display: flex; flex-direction: column; gap: 10px;
+      max-height: 500px; overflow-y: auto;
+    }
+
+    .json-editor {
+      width: 100%; min-height: 200px;
+      background: var(--bg);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-active);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
+      resize: vertical; outline: none;
+      transition: border-color var(--transition);
+    }
+
+    .json-editor:focus { border-color: var(--accent); }
+
+    .outline-plan-item {
+      display: flex; gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      align-items: flex-start;
+    }
+
+    .outline-plan-item:last-child { border-bottom: none; }
+
+    .outline-chapter-no {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      color: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .outline-chapter-goal { font-size: 13px; line-height: 1.5; color: var(--text-secondary); padding-top: 3px; }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    .fade-in { animation: fadeIn 0.3s ease; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .story-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+    }
+
+    .meta-item {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px;
+    }
+
+    .meta-item .label {
+      font-size: 11px; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+
+    .meta-item .value { font-size: 14px; font-weight: 600; color: var(--text); }
+
+    .chapter-selector { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    .chapter-selector .chapter-btn {
+      padding: 5px 14px;
+      border-radius: 99px;
+      font-size: 12px; font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border-active);
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      transition: all var(--transition);
+      font-family: var(--font-sans);
+    }
+
+    .chapter-selector .chapter-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    .chapter-selector .chapter-btn.active {
+      background: var(--accent-soft);
+      border-color: rgba(212,160,83,0.3);
+      color: var(--accent);
+    }
+
+    .mobile-menu-btn {
+      display: none;
+      width: 36px; height: 36px;
+      align-items: center; justify-content: center;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-active);
+      background: var(--bg-surface);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 18px;
+    }
+
+    .overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 15;
+    }
+
+    .toast-container {
+      position: fixed;
+      top: 72px; right: 24px;
+      display: flex; flex-direction: column; gap: 8px;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    .toast {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 18px;
+      border-radius: var(--radius-md);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-lg);
+      font-size: 13px;
+      color: var(--text);
+      pointer-events: auto;
+      animation: toastIn 0.3s ease;
+      max-width: 380px;
+    }
+
+    .toast.out { animation: toastOut 0.25s ease forwards; }
+
+    .toast-icon { font-size: 16px; flex-shrink: 0; }
+    .toast-success .toast-icon { color: var(--success); }
+    .toast-error .toast-icon { color: var(--danger); }
+    .toast-warning .toast-icon { color: var(--accent); }
+    .toast-info .toast-icon { color: var(--info); }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(40px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes toastOut {
+      from { opacity: 1; transform: translateX(0); }
+      to { opacity: 0; transform: translateX(40px); }
+    }
+
+    .btn.loading { pointer-events: none; color: transparent !important; }
+    .btn.loading::after {
+      content: '';
+      position: absolute;
+      width: 16px; height: 16px;
+      border: 2px solid transparent;
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    .btn-primary.loading::after { border-top-color: #1a1a1f; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .chapter-nav {
+      display: flex; align-items: center; gap: 8px;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .chapter-nav .btn { flex: 1; }
+
+    .auto-gen-card { border: 1px solid var(--accent); background: var(--accent-soft); }
+    .auto-gen-card .card-header { border-bottom-color: rgba(212,160,83,0.2); }
+
+    .progress-bar-track {
+      width: 100%; height: 6px;
+      background: var(--bg-surface);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      transition: width 0.4s ease;
+    }
+
+    .auto-gen-log {
+      max-height: 300px;
+      overflow-y: auto;
+      font-size: 12px;
+      line-height: 1.8;
+      color: var(--text-secondary);
+      padding: 12px;
+      background: var(--bg);
+      border-radius: var(--radius-md);
+      margin-top: 12px;
+    }
+    .auto-gen-log .log-item { padding: 2px 0; }
+    .auto-gen-log .log-item.done { color: var(--success); }
+    .auto-gen-log .log-item.active { color: var(--accent); font-weight: 600; }
+    .auto-gen-log .log-item.error { color: var(--danger); }
+
+    @media (max-width: 900px) {
+      .app-layout { grid-template-columns: 1fr; }
+      .sidebar {
+        position: fixed; left: -280px; top: 60px; bottom: 0;
+        width: 260px; z-index: 16;
+        transition: left var(--transition);
+        box-shadow: var(--shadow-lg);
+      }
+      .sidebar.open { left: 0; }
+      .overlay.open { display: block; }
+      .mobile-menu-btn { display: flex; }
+      .content-header { padding: 20px 16px 0; }
+      .content-body { padding: 16px; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .toast-container { right: 12px; left: 12px; }
+      .toast { max-width: 100%; }
+    }
+
+    @media (max-width: 600px) {
+      .story-meta-grid { grid-template-columns: 1fr 1fr; }
+      .header-actions .btn span.hide-mobile { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <header>
+      <div class="row">
+        <button class="mobile-menu-btn" id="mobileMenuBtn">☰</button>
+        <div class="logo">
+          <div class="logo-icon">✦</div>
+          <span class="logo-text">StoryWeaver</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-ghost btn-sm" id="reloadBtn" title="刷新数据">
+          <span>↻</span> <span class="hide-mobile">刷新</span>
+        </button>
+        <button class="btn btn-danger btn-sm" id="resetBtn" title="重置项目">
+          <span>⟲</span> <span class="hide-mobile">重置</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="overlay" id="overlay"></div>
+
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">创作流程</div>
+        <div class="nav-item active" data-page="story" data-file="story_brief">
+          <span class="icon">💡</span><span>故事构思</span>
+        </div>
+        <div class="nav-item" data-page="outline" data-file="outline">
+          <span class="icon">📋</span><span>故事大纲</span>
+        </div>
+        <div class="nav-item" data-page="characters" data-file="characters">
+          <span class="icon">👥</span><span>角色设定</span>
+          <span class="badge" id="characterCount" style="display:none">0</span>
+        </div>
+        <div class="nav-item" data-page="storyline" data-file="storyline">
+          <span class="icon">🗺️</span><span>故事线</span>
+        </div>
+      </div>
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">写作</div>
+        <div class="nav-item" data-page="write" data-file="outline">
+          <span class="icon">✍️</span><span>生成章节</span>
+        </div>
+        <div class="nav-item" data-page="chapters" data-file="storyline">
+          <span class="icon">📖</span><span>章节正文</span>
+          <span class="badge" id="chapterCount" style="display:none">0</span>
+        </div>
+      </div>
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">数据</div>
+        <div class="nav-item" data-page="memory" data-file="conversation_memory">
+          <span class="icon">🧠</span><span>创作记忆</span>
+        </div>
+        <div class="nav-item" data-page="output">
+          <span class="icon">💬</span><span>实时输出</span>
+        </div>
+        <div class="nav-item" data-page="advanced">
+          <span class="icon">⚙️</span><span>高级编辑</span>
+        </div>
+      </div>
+      <div class="sidebar-actions">
+        <button class="new-story-btn" id="newStoryBtn">
+          <span>✨</span><span>开始新故事</span>
+        </button>
+        <div class="status-bar">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">等待操作</span>
+        </div>
+      </div>
+    </nav>
+
+    <main class="main-content">
+      <div class="page active" id="page-story">
+        <div class="content-header fade-in">
+          <h2>💡 故事构思</h2>
+          <p class="subtitle">用一段话描述你想创作的故事，AI 会帮你构建完整的世界</p>
+        </div>
+        <div class="content-body fade-in">
+          <div class="stack">
+            <div class="card">
+              <div class="card-body">
+                <div class="stack">
+                  <div class="form-group">
+                    <label class="form-label">故事描述</label>
+                    <textarea id="storyBriefInput" style="min-height:160px" placeholder="比如：一个在末日废墟中寻找失落文明的少女，意外发现人类并非地球唯一的主人……"></textarea>
+                    <span class="form-hint">越详细的描述，生成的大纲越贴合你的想法</span>
+                  </div>
+                  <div class="row">
+                    <button class="btn btn-primary" id="generateOutlineBtn">✨ 生成大纲</button>
+                    <button class="btn btn-secondary" id="confirmOutlineBtn">✓ 确认大纲</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-body">
+                <div class="row">
+                  <span class="status-dot warning" id="outlineStateDot"></span>
+                  <span id="outlineState" style="font-size:14px;">大纲状态：尚未创建</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="page" id="page-outline">
+        <div class="content-header fade-in"><h2>📋 故事大纲</h2><p class="subtitle" id="outlineSubtitle">查看和管理你的故事大纲</p></div>
+        <div class="content-body fade-in"><div id="outlineContent"><div class="empty-state"><div class="icon">📋</div><h3>还没有大纲</h3><p>先去「故事构思」页面描述你的故事，AI 会帮你生成大纲</p></div></div></div>
+      </div>
+
+      <div class="page" id="page-characters">
+        <div class="content-header fade-in"><h2>👥 角色设定</h2><p class="subtitle" id="charactersSubtitle">你的故事中的人物</p></div>
+        <div class="content-body fade-in"><div id="charactersContent"><div class="empty-state"><div class="icon">👥</div><h3>还没有角色</h3><p>确认大纲后会自动提取角色设定</p></div></div></div>
+      </div>
+
+      <div class="page" id="page-storyline">
+        <div class="content-header fade-in"><h2>🗺️ 故事线</h2><p class="subtitle" id="storylineSubtitle">追踪故事的脉络与线索</p></div>
+        <div class="content-body fade-in"><div id="storylineContent"><div class="empty-state"><div class="icon">🗺️</div><h3>故事线为空</h3><p>生成并确认章节后，故事线会自动更新</p></div></div></div>
+      </div>
+
+      <div class="page" id="page-write">
+        <div class="content-header fade-in"><h2>✍️ 生成章节</h2><p class="subtitle">让 AI 为你续写故事的新篇章</p></div>
+        <div class="content-body fade-in">
+          <div class="stack">
+            <div id="writeNotReady" class="card">
+              <div class="card-body"><div class="empty-state" style="padding:32px"><div class="icon">🔒</div><h3>请先确认大纲</h3><p>在「故事构思」页面生成并确认大纲后，才能开始写章节</p></div></div>
+            </div>
+            <div id="writeReady" style="display:none">
+              <div class="stack">
+                <div class="card">
+                  <div class="card-header"><h3>章节设置</h3><span class="chip chip-success">大纲已确认</span></div>
+                  <div class="card-body">
+                    <div class="stack">
+                      <div class="grid-2">
+                        <div class="form-group"><label class="form-label">章节编号</label><input id="chapterNo" type="number" min="1" value="1" /></div>
+                        <div class="form-group"><label class="form-label">目标字数</label><input id="lengthTarget" type="number" min="200" value="1800" /></div>
+                      </div>
+                      <div class="form-group"><label class="form-label">章节标题</label><input id="chapterTitle" type="text" placeholder="留空则自动生成" /></div>
+                      <div class="form-group"><label class="form-label">语气风格</label><input id="chapterTone" type="text" placeholder="如：紧张、温馨、悬疑（可选）" /></div>
+                      <div class="form-group"><label class="form-label">创作指令</label><textarea id="chapterInstruction" style="min-height:80px" placeholder="如：本章增加冲突，强化悬念"></textarea></div>
+                      <div class="row">
+                        <button class="btn btn-primary" id="generateBtn">✨ 开始生成</button>
+                        <button class="btn btn-secondary" id="viewOutlineBtn">📋 查看大纲</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="card" id="chapterOutlineCard" style="display:none">
+                  <div class="card-header"><h3>本章大纲</h3></div>
+                  <div class="card-body"><div id="chapterOutlineState" style="font-size:13px;color:var(--text-secondary);"></div></div>
+                </div>
+                <div class="card auto-gen-card">
+                  <div class="card-header"><h3>🚀 自动续写</h3><span class="chip chip-info">批量生成</span></div>
+                  <div class="card-body">
+                    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">AI 自动规划多个章节的情节和字数，逐章生成并确认。长章节会自动分段续写。</p>
+                    <div class="grid-2">
+                      <div class="form-group"><label class="form-label">续写章数</label><input id="autoGenCount" type="number" min="1" max="20" value="3" /></div>
+                      <div class="form-group"><label class="form-label">整体指引</label><input id="autoGenInstruction" type="text" placeholder="如：加快节奏、增加转折（可选）" /></div>
+                    </div>
+                    <div class="row" style="margin-top:4px;">
+                      <button class="btn btn-primary" id="autoGenBtn">🚀 开始自动续写</button>
+                      <button class="btn btn-danger btn-sm" id="autoGenStopBtn" style="display:none;">⏹ 停止</button>
+                    </div>
+                    <div id="autoGenProgress" style="display:none;">
+                      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
+                        <span id="autoGenStatus" style="font-size:13px;color:var(--accent);">准备中...</span>
+                        <span id="autoGenCounter" style="font-size:12px;color:var(--text-secondary);">0/0</span>
+                      </div>
+                      <div class="progress-bar-track"><div class="progress-bar-fill" id="autoGenProgressBar" style="width:0%"></div></div>
+                      <div class="auto-gen-log" id="autoGenLog"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><h3>修改已有章节</h3></div>
+              <div class="card-body">
+                <div class="stack">
+                  <div class="grid-2">
+                    <div class="form-group"><label class="form-label">章节编号</label><input id="chatChapterNo" type="number" min="1" value="1" /></div>
+                    <div class="form-group"><label class="form-label">&nbsp;</label><span class="form-hint" style="padding-top:10px">指定要修改的章节</span></div>
+                  </div>
+                  <div class="form-group"><label class="form-label">修改指令</label><textarea id="chatInput" style="min-height:70px" placeholder="如：把战斗场景写得更激烈"></textarea></div>
+                  <button class="btn btn-secondary" id="chatBtn">✏️ 修改章节</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="page" id="page-chapters">
+        <div class="content-header fade-in"><h2>📖 章节正文</h2><p class="subtitle" id="chaptersSubtitle">阅读和管理你的故事章节</p></div>
+        <div class="content-body fade-in"><div id="chaptersContent"><div class="empty-state"><div class="icon">📖</div><h3>还没有章节</h3><p>去「生成章节」页面开始创作吧</p></div></div></div>
+      </div>
+
+      <div class="page" id="page-memory">
+        <div class="content-header fade-in"><h2>🧠 创作记忆</h2><p class="subtitle">AI 记住的对话约束与创作上下文</p></div>
+        <div class="content-body fade-in"><div id="memoryContent"><div class="empty-state"><div class="icon">🧠</div><h3>暂无记忆</h3><p>开始创作后，AI 会记住你的偏好和约束</p></div></div></div>
+      </div>
+
+      <div class="page" id="page-output">
+        <div class="content-header fade-in"><h2>💬 实时输出</h2><p class="subtitle">AI 生成过程中的实时反馈</p></div>
+        <div class="content-body fade-in">
+          <div class="stream-log" id="streamLog"></div>
+          <div style="margin-top:12px;font-size:12px;color:var(--text-muted);">生成时会以对话气泡方式逐步输出。</div>
+        </div>
+      </div>
+
+      <div class="page" id="page-advanced">
+        <div class="content-header fade-in"><h2>⚙️ 高级编辑</h2><p class="subtitle">直接编辑项目 JSON 数据（高级功能）</p></div>
+        <div class="content-body fade-in">
+          <div class="stack">
+            <div class="tab-bar" id="fileTabs">
+              <button class="tab-item active" data-file="story_brief">故事简介</button>
+              <button class="tab-item" data-file="outline_draft">大纲草案</button>
+              <button class="tab-item" data-file="outline">大纲</button>
+              <button class="tab-item" data-file="characters">角色</button>
+              <button class="tab-item" data-file="storyline">故事线</button>
+              <button class="tab-item" data-file="conversation_memory">对话记忆</button>
+            </div>
+            <div class="row" style="justify-content:space-between;">
+              <span style="font-size:13px;color:var(--text-secondary);">当前编辑：<strong id="currentFile" style="color:var(--accent)">story_brief.json</strong></span>
+              <button class="btn btn-secondary btn-sm" id="saveBtn">💾 保存</button>
+            </div>
+            <textarea id="editor" class="json-editor" spellcheck="false"></textarea>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    const state = {
+      currentFile: 'story_brief',
+      currentPage: 'story',
+      chapterTexts: {},
+      previewChapter: null,
+      files: {},
+      generating: false,
+    };
+
+    const fileLabels = {
+      story_brief: 'story_brief.json',
+      outline_draft: 'outline_draft.json',
+      outline: 'outline.json',
+      characters: 'characters.json',
+      storyline: 'storyline.json',
+      conversation_memory: 'conversation_memory.json',
+    };
+
+    const editor = document.getElementById('editor');
+    const storyBriefInput = document.getElementById('storyBriefInput');
+    const currentFileEl = document.getElementById('currentFile');
+    const outlineStateEl = document.getElementById('outlineState');
+    const outlineStateDot = document.getElementById('outlineStateDot');
+    const statusText = document.getElementById('statusText');
+    const statusDot = document.getElementById('statusDot');
+    const streamLog = document.getElementById('streamLog');
+    const generateBtn = document.getElementById('generateBtn');
+
+    function isOutlineConfirmed() {
+      return (state.files.outline || {}).status === 'confirmed';
+    }
+
+    function pretty(data) { return JSON.stringify(data, null, 2); }
+
+    function escapeHtml(text) {
+      if (text === null || text === undefined) return '';
+      return String(text).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+    }
+
+    function setStatus(text, type = '') {
+      statusText.textContent = text;
+      statusDot.className = 'status-dot';
+      if (type === 'success' || text.includes('已') || text.includes('成功')) statusDot.classList.add('active');
+      else if (type === 'error' || text.includes('失败')) statusDot.classList.add('error');
+      else if (type === 'warning' || text.includes('正在')) statusDot.classList.add('warning');
+    }
+
+    function toast(message, type = 'info', duration = 3500) {
+      const container = document.getElementById('toastContainer');
+      const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
+      const el = document.createElement('div');
+      el.className = `toast toast-${type}`;
+      el.innerHTML = `<span class="toast-icon">${icons[type] || icons.info}</span><span>${escapeHtml(message)}</span>`;
+      container.appendChild(el);
+      setTimeout(() => {
+        el.classList.add('out');
+        el.addEventListener('animationend', () => el.remove());
+      }, duration);
+    }
+
+    function setLoading(btn, loading) {
+      if (loading) {
+        btn.classList.add('loading');
+        btn.disabled = true;
+      } else {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+      }
+    }
+
+    function showConfirm(title, message) {
+      return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'confirm-overlay';
+        overlay.innerHTML = `<div class="confirm-dialog">
+          <h3>${escapeHtml(title)}</h3>
+          <p>${escapeHtml(message)}</p>
+          <div class="confirm-actions">
+            <button class="btn btn-secondary btn-sm" id="confirmCancel">取消</button>
+            <button class="btn btn-danger btn-sm" id="confirmOk">确认清除</button>
+          </div>
+        </div>`;
+        document.body.appendChild(overlay);
+        overlay.querySelector('#confirmCancel').onclick = () => { overlay.remove(); resolve(false); };
+        overlay.querySelector('#confirmOk').onclick = () => { overlay.remove(); resolve(true); };
+        overlay.addEventListener('click', e => { if (e.target === overlay) { overlay.remove(); resolve(false); } });
+      });
+    }
+
+    async function api(path, options = {}) {
+      const res = await fetch(path, {
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        ...options,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    }
+
+    function parseSseFrame(frame) {
+      const lines = frame.split(/\r?\n/);
+      let event = 'message';
+      const dataLines = [];
+      for (const line of lines) {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
+      }
+      return { event, data: dataLines.join('\n') };
+    }
+
+    async function streamApi(path, payload, handlers = {}) {
+      const res = await fetch(`${path}?stream=1`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      let finalPayload = null;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf('\n\n')) >= 0) {
+          const frame = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          if (!frame.trim()) continue;
+          const event = parseSseFrame(frame);
+          if (event.event === 'chunk') handlers.onChunk?.(event.data);
+          else if (event.event === 'meta') handlers.onMeta?.(event.data);
+          else if (event.event === 'final') { finalPayload = JSON.parse(event.data); handlers.onFinal?.(finalPayload); }
+          else if (event.event === 'error') { const err = JSON.parse(event.data); throw new Error(err.error || 'stream error'); }
+        }
+      }
+      return finalPayload;
+    }
+
+    function addBubble(role, title, text = '') {
+      const node = document.createElement('div');
+      node.className = `bubble ${role}`;
+      node.innerHTML = `<div class="label">${escapeHtml(title)}</div><pre>${escapeHtml(text)}</pre>`;
+      streamLog.appendChild(node);
+      streamLog.scrollTop = streamLog.scrollHeight;
+      return node.querySelector('pre');
+    }
+
+    function parseSseChunk(text) {
+      try { const payload = JSON.parse(text); return payload.text || ''; } catch (e) { return text; }
+    }
+
+    function navigateTo(page) {
+      state.currentPage = page;
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      const target = document.getElementById(`page-${page}`);
+      if (target) target.classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
+      closeMobileMenu();
+    }
+
+    function closeMobileMenu() {
+      document.getElementById('sidebar').classList.remove('open');
+      document.getElementById('overlay').classList.remove('open');
+    }
+
+    document.getElementById('mobileMenuBtn').addEventListener('click', () => {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('overlay').classList.toggle('open');
+    });
+
+    document.getElementById('overlay').addEventListener('click', closeMobileMenu);
+
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const page = item.dataset.page;
+        navigateTo(page);
+        if (item.dataset.file) { state.currentFile = item.dataset.file; renderCurrentFile(); }
+        renderPageContent(page);
+      });
+    });
+
+    function renderPageContent(page) {
+      if (page === 'outline') renderOutlinePage();
+      else if (page === 'characters') renderCharactersPage();
+      else if (page === 'storyline') renderStorylinePage();
+      else if (page === 'chapters') renderChaptersPage();
+      else if (page === 'memory') renderMemoryPage();
+    }
+
+    function renderOutlinePage() {
+      const confirmed = state.files.outline;
+      const isConfirmed = confirmed && confirmed.confirmed_at;
+      const outline = isConfirmed ? confirmed : (state.files.outline_draft || {});
+      const hasData = outline.title || (Array.isArray(outline.chapter_plan) && outline.chapter_plan.length > 0);
+      const container = document.getElementById('outlineContent');
+      const subtitle = document.getElementById('outlineSubtitle');
+
+      if (!hasData) {
+        container.innerHTML = '<div class="empty-state"><div class="icon">📋</div><h3>还没有大纲</h3><p>先去「故事构思」页面描述你的故事，AI 会帮你生成大纲</p></div>';
+        subtitle.textContent = '查看和管理你的故事大纲';
+        return;
+      }
+
+      subtitle.textContent = isConfirmed ? `已确认 · ${outline.title || '未命名'}` : `草案 · ${outline.title || '未命名'}`;
+      const plans = Array.isArray(outline.chapter_plan) ? outline.chapter_plan : [];
+
+      container.innerHTML = `<div class="stack">
+        <div class="row" style="gap:12px;flex-wrap:wrap;">
+          ${isConfirmed ? '<span class="chip chip-success">✓ 已确认</span>' : '<span class="chip chip-warning">草案</span>'}
+          ${outline.genre ? `<span class="chip chip-info">${escapeHtml(outline.genre)}</span>` : ''}
+        </div>
+        <div class="story-meta-grid">
+          ${outline.title ? `<div class="meta-item"><div class="label">标题</div><div class="value">${escapeHtml(outline.title)}</div></div>` : ''}
+          ${outline.genre ? `<div class="meta-item"><div class="label">题材</div><div class="value">${escapeHtml(outline.genre)}</div></div>` : ''}
+          ${outline.theme ? `<div class="meta-item"><div class="label">主题</div><div class="value">${escapeHtml(outline.theme)}</div></div>` : ''}
+          <div class="meta-item"><div class="label">章节数</div><div class="value">${plans.length}</div></div>
+        </div>
+        ${outline.logline ? `<div style="padding:16px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);line-height:1.6;font-size:14px;color:var(--text-secondary);">${escapeHtml(outline.logline)}</div>` : ''}
+        ${plans.length > 0 ? `<div class="card"><div class="card-header"><h3>章节计划</h3><span class="chip chip-info">${plans.length} 章</span></div><div class="card-body" style="padding:8px 20px;">${plans.slice(0, 30).map(item => `<div class="outline-plan-item"><div class="outline-chapter-no">${item.chapter_no || '?'}</div><div class="outline-chapter-goal">${escapeHtml(item.goal || '')}</div></div>`).join('')}</div></div>` : ''}
+      </div>`;
+    }
+
+    function renderCharactersPage() {
+      const chars = state.files.characters?.characters || [];
+      const container = document.getElementById('charactersContent');
+      const subtitle = document.getElementById('charactersSubtitle');
+      const badge = document.getElementById('characterCount');
+
+      subtitle.textContent = `共 ${chars.length} 个角色`;
+      if (chars.length > 0) { badge.style.display = ''; badge.textContent = chars.length; }
+      else { badge.style.display = 'none'; }
+
+      if (chars.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="icon">👥</div><h3>还没有角色</h3><p>确认大纲后会自动提取角色设定</p></div>';
+        return;
+      }
+
+      container.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">' + chars.map(c => {
+        let fieldsHtml = '';
+        for (const [k, v] of Object.entries(c)) {
+          if (['id', 'name', 'role'].includes(k)) continue;
+          let displayVal;
+          if (Array.isArray(v)) { displayVal = v.length > 0 ? v.join('、') : '无'; }
+          else if (v !== null && typeof v === 'object') {
+            const subFields = Object.entries(v).map(([sk, sv]) => {
+              const sv2 = Array.isArray(sv) ? sv.join('、') : String(sv);
+              return `<span style="color:var(--text-muted);">${escapeHtml(sk)}:</span> ${escapeHtml(sv2)}`;
+            }).join(' · ');
+            fieldsHtml += `<div class="character-detail"><span style="color:var(--text-secondary);font-weight:500;">${escapeHtml(k)}：</span>${subFields}</div>`;
+            continue;
+          } else { displayVal = (v !== null && v !== undefined && v !== '') ? String(v) : '无'; }
+          fieldsHtml += `<div class="character-detail"><span style="color:var(--text-secondary);font-weight:500;">${escapeHtml(k)}：</span>${escapeHtml(displayVal)}</div>`;
+        }
+        return `<div class="character-card"><div style="margin-bottom:8px;"><span class="character-name">${escapeHtml(c.name || '未命名')}</span><span class="character-role">${escapeHtml(c.role || '')}</span></div>${fieldsHtml}</div>`;
+      }).join('') + '</div>';
+    }
+
+    function renderStorylinePage() {
+      const storyline = state.files.storyline || {};
+      const chapters = Array.isArray(storyline.chapter_summaries) ? storyline.chapter_summaries : [];
+      const container = document.getElementById('storylineContent');
+      const subtitle = document.getElementById('storylineSubtitle');
+
+      subtitle.textContent = `已记录 ${chapters.length} 章`;
+
+      if (!storyline.overall_summary && chapters.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="icon">🗺️</div><h3>故事线为空</h3><p>生成并确认章节后，故事线会自动更新</p></div>';
+        return;
+      }
+
+      const chapterListHtml = chapters.length > 0
+        ? chapters.map(item => {
+          if (typeof item === 'object' && item !== null) {
+            const title = item.title ? `《${item.title}》` : `第${item.chapter_no || '?'}章`;
+            const summaryArr = Array.isArray(item.summary) ? item.summary : (item.summary ? [item.summary] : []);
+            return `<div class="outline-plan-item"><div class="outline-chapter-no">${item.chapter_no || '?'}</div><div class="outline-chapter-goal"><strong>${escapeHtml(title)}</strong>${summaryArr.length > 0 ? '<br>' + escapeHtml(summaryArr.join('；')) : ''}</div></div>`;
+          }
+          return `<div class="outline-plan-item"><div class="outline-chapter-goal">${escapeHtml(String(item))}</div></div>`;
+        }).join('')
+        : '<div style="color:var(--text-muted);font-size:13px;">尚无章节记录</div>';
+
+      container.innerHTML = `<div class="stack">
+        ${storyline.overall_summary ? `<div class="card"><div class="card-header"><h3>故事线摘要</h3></div><div class="card-body" style="line-height:1.6;font-size:14px;color:var(--text-secondary);">${escapeHtml(storyline.overall_summary)}</div></div>` : ''}
+        ${chapters.length > 0 ? `<div class="card"><div class="card-header"><h3>章节记录</h3><span class="chip chip-info">${chapters.length} 章</span></div><div class="card-body" style="padding:8px 20px;">${chapterListHtml}</div></div>` : ''}
+        ${(storyline.open_threads || []).length > 0 ? `<div class="card"><div class="card-header"><h3>未解决线索</h3><span class="chip chip-danger">${storyline.open_threads.length}</span></div><div class="card-body"><ul class="preview-list">${storyline.open_threads.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div></div>` : ''}
+      </div>`;
+    }
+
+    function renderChaptersPage() {
+      const nos = Object.keys(state.chapterTexts).map(Number).filter(n => state.chapterTexts[n] !== null).sort((a, b) => a - b);
+      const container = document.getElementById('chaptersContent');
+      const subtitle = document.getElementById('chaptersSubtitle');
+      const badge = document.getElementById('chapterCount');
+
+      subtitle.textContent = nos.length > 0 ? `${nos.length} 个章节` : '阅读和管理你的故事章节';
+      if (nos.length > 0) { badge.style.display = ''; badge.textContent = nos.length; }
+      else { badge.style.display = 'none'; }
+
+      if (nos.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="icon">📖</div><h3>还没有章节</h3><p>去「生成章节」页面开始创作吧</p></div>';
+        return;
+      }
+
+      const selector = `<div class="chapter-selector">${nos.map(no => {
+        const ch = state.chapterTexts[no];
+        const isConfirmed = ch && ch.status === 'confirmed';
+        const activeClass = state.previewChapter === no ? ' active' : '';
+        const confirmedMark = isConfirmed ? ' ✓' : '';
+        return `<button class="chapter-btn${activeClass}" onclick="selectPreviewChapter(${no})">第${no}章${confirmedMark}</button>`;
+      }).join('')}</div>`;
+
+      const cur = state.previewChapter !== null ? state.chapterTexts[state.previewChapter] : null;
+      let textArea = '';
+      if (cur) {
+        const updatesHtml = buildUpdatesHtml(cur.updates || {});
+        const isConfirmed = cur.status === 'confirmed';
+        const statusBadge = isConfirmed ? '<span class="chip chip-success">✓ 已确认</span>' : '<span class="chip chip-warning">草稿</span>';
+        const confirmBtn = isConfirmed ? '' : `<button onclick="confirmChapter(${state.previewChapter})" class="btn btn-primary btn-sm" style="margin-top:12px;">✓ 确认章节</button>`;
+
+        const curIdx = nos.indexOf(state.previewChapter);
+        const prevNo = curIdx > 0 ? nos[curIdx - 1] : null;
+        const nextNo = curIdx < nos.length - 1 ? nos[curIdx + 1] : null;
+        const navHtml = (prevNo || nextNo) ? `<div class="chapter-nav">
+          ${prevNo ? `<button class="btn btn-secondary btn-sm" onclick="selectPreviewChapter(${prevNo})">← 第${prevNo}章</button>` : '<div></div>'}
+          ${nextNo ? `<button class="btn btn-secondary btn-sm" onclick="selectPreviewChapter(${nextNo})">第${nextNo}章 →</button>` : '<div></div>'}
+        </div>` : '';
+
+        textArea = `<div style="margin-bottom:12px;" class="row"><span style="font-size:18px;font-weight:700;font-family:var(--font-serif);">《${escapeHtml(cur.title)}》</span>${statusBadge}</div>${confirmBtn}<div class="chapter-text" style="margin-top:16px;">${escapeHtml(cur.text)}</div>${updatesHtml ? '<div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">' + updatesHtml + '</div>' : ''}${navHtml}`;
+      } else {
+        textArea = '<div style="color:var(--text-muted);font-size:14px;padding:24px 0;">请选择章节查看正文</div>';
+      }
+
+      container.innerHTML = `<div class="stack">${selector}<div class="card"><div class="card-body">${textArea}</div></div></div>`;
+    }
+
+    function renderMemoryPage() {
+      const memory = state.files.conversation_memory || {};
+      const summary = memory.dialogue_summary || {};
+      const turns = (memory.recent_turns || []).filter(t => t.type !== 'chapter').slice(-5).reverse();
+      const container = document.getElementById('memoryContent');
+
+      const constraints = summary.confirmed_constraints || [];
+      const turnsHtml = turns.length > 0
+        ? turns.map(t => `<div class="bubble user" style="margin-bottom:8px;"><div class="label">你的要求</div><div style="font-size:13px;line-height:1.5;">${escapeHtml(t.user)}</div></div><div class="bubble assistant" style="margin-bottom:12px;"><div class="label">AI 回应</div><div style="font-size:13px;line-height:1.5;">${escapeHtml((t.assistant || '').substring(0, 200))}${(t.assistant || '').length > 200 ? '...' : ''}</div></div>`).join('')
+        : '<div style="color:var(--text-muted);font-size:13px;">暂无对话记录</div>';
+
+      container.innerHTML = `<div class="stack">
+        ${constraints.length > 0 ? `<div class="card"><div class="card-header"><h3>已确认的约束</h3><span class="chip chip-warning">${constraints.length}</span></div><div class="card-body"><ul class="preview-list">${constraints.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul></div></div>` : ''}
+        <div class="card"><div class="card-header"><h3>最近对话</h3></div><div class="card-body">${turnsHtml}</div></div>
+      </div>`;
+    }
+
+    function buildUpdatesHtml(updates) {
+      if (!updates || Object.keys(updates).length === 0) return '';
+      let html = '';
+      if ((updates.chapter_summary || []).length) html += '<div class="preview-section"><div class="preview-section-title" style="color:var(--success);">章节摘要</div><ul class="preview-list">' + updates.chapter_summary.map(s => `<li>${escapeHtml(s)}</li>`).join('') + '</ul></div>';
+      if ((updates.new_events || []).length) html += '<div class="preview-section"><div class="preview-section-title" style="color:var(--accent);">新事件</div><ul class="preview-list">' + updates.new_events.map(s => `<li>${escapeHtml(s)}</li>`).join('') + '</ul></div>';
+      if ((updates.open_threads || []).length) html += '<div class="preview-section"><div class="preview-section-title" style="color:var(--danger);">新增悬念</div><ul class="preview-list">' + updates.open_threads.map(s => `<li>${escapeHtml(s)}</li>`).join('') + '</ul></div>';
+      if ((updates.character_updates || []).length) html += '<div class="preview-section"><div class="preview-section-title">角色状态更新</div><ul class="preview-list">' + updates.character_updates.map(c => `<li><strong>${escapeHtml(c.id)}</strong> ${escapeHtml(JSON.stringify(c.current_state_changes || {}))}</li>`).join('') + '</ul></div>';
+      if ((updates.new_characters || []).length) html += '<div class="preview-section"><div class="preview-section-title" style="color:var(--info);">新角色出场</div><ul class="preview-list">' + updates.new_characters.map(c => `<li><strong>${escapeHtml(c.name)}</strong> (${escapeHtml(c.role || '')})</li>`).join('') + '</ul></div>';
+      return html;
+    }
+
+    function chapterRecordToViewModel(no, data) {
+      if (!data || typeof data !== 'object') return null;
+      return {
+        title: data.title || `第${no}章`,
+        text: data.chapter_text || '',
+        status: data.status || 'draft',
+        updates: data,
+      };
+    }
+
+    async function syncChapterCache() {
+      const chNos = await api('/api/chapters', { method: 'GET' });
+      const chapterNos = Array.isArray(chNos.chapters) ? chNos.chapters.map(Number).filter(Number.isFinite) : [];
+      const chapterSet = new Set(chapterNos);
+
+      Object.keys(state.chapterTexts).forEach(key => {
+        const no = Number(key);
+        if (!chapterSet.has(no)) delete state.chapterTexts[key];
+      });
+
+      if (chapterNos.length === 0) {
+        state.previewChapter = null;
+        return;
+      }
+
+      const details = await Promise.all(chapterNos.map(no =>
+        fetch(`/api/chapter/${no}`)
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null)
+      ));
+
+      chapterNos.forEach((no, index) => {
+        const viewModel = chapterRecordToViewModel(no, details[index]);
+        if (viewModel) state.chapterTexts[no] = viewModel;
+      });
+
+      if (state.previewChapter === null || !chapterSet.has(Number(state.previewChapter))) {
+        state.previewChapter = chapterNos[chapterNos.length - 1];
+      }
+    }
+
+    function selectPreviewChapter(no) {
+      state.previewChapter = no;
+      if (!state.chapterTexts[no]) {
+        fetch(`/api/chapter/${no}`).then(r => r.json()).then(data => {
+          if (data.chapter_text) {
+            state.chapterTexts[no] = chapterRecordToViewModel(no, data);
+            renderChaptersPage();
+          }
+        }).catch(() => {});
+        return;
+      }
+      renderChaptersPage();
+    }
+
+    function renderCurrentFile() {
+      const data = state.files[state.currentFile] || {};
+      currentFileEl.textContent = fileLabels[state.currentFile];
+      editor.value = pretty(data);
+      document.querySelectorAll('#fileTabs .tab-item').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.file === state.currentFile);
+      });
+    }
+
+    function showChapterOutline(chapterNo) {
+      const outline = state.files.outline || {};
+      const plans = Array.isArray(outline.chapter_plan) ? outline.chapter_plan : [];
+      const plan = plans.find(p => p.chapter_no === chapterNo);
+      const card = document.getElementById('chapterOutlineCard');
+      const stateEl = document.getElementById('chapterOutlineState');
+      if (plan) {
+        card.style.display = '';
+        stateEl.innerHTML = `<div class="outline-plan-item"><div class="outline-chapter-no">${plan.chapter_no}</div><div class="outline-chapter-goal">${escapeHtml(plan.goal || '无目标描述')}</div></div>`;
+      } else {
+        card.style.display = 'none';
+      }
+    }
+
+    function syncFlowState() {
+      const confirmed = isOutlineConfirmed();
+      const outlineTitle = (state.files.outline || {}).title || '未命名';
+
+      document.getElementById('writeNotReady').style.display = confirmed ? 'none' : '';
+      document.getElementById('writeReady').style.display = confirmed ? '' : 'none';
+      generateBtn.disabled = !confirmed;
+
+      if (confirmed) {
+        outlineStateEl.textContent = `大纲已确认：${outlineTitle}`;
+        outlineStateDot.className = 'status-dot active';
+        document.getElementById('confirmOutlineBtn').disabled = true;
+      } else {
+        outlineStateEl.textContent = '大纲尚未确认，请先生成并确认大纲';
+        outlineStateDot.className = 'status-dot warning';
+        document.getElementById('confirmOutlineBtn').disabled = !state.files.outline_draft;
+      }
+
+      const chars = state.files.characters?.characters || [];
+      const badge = document.getElementById('characterCount');
+      if (chars.length > 0) { badge.style.display = ''; badge.textContent = chars.length; }
+      else { badge.style.display = 'none'; }
+
+      const nos = Object.keys(state.chapterTexts).filter(n => state.chapterTexts[n] !== null).map(Number);
+      const chBadge = document.getElementById('chapterCount');
+      if (nos.length > 0) { chBadge.style.display = ''; chBadge.textContent = nos.length; }
+      else { chBadge.style.display = 'none'; }
+
+      if (confirmed) {
+        const nextNo = nos.length > 0 ? Math.max(...nos) + 1 : 1;
+        const chapterNoInput = document.getElementById('chapterNo');
+        if (chapterNoInput && !state.generating) {
+          chapterNoInput.value = nextNo;
+          showChapterOutline(nextNo);
+        }
+      }
+    }
+
+    async function loadState() {
+      setStatus('正在加载项目文件...', 'warning');
+      const data = await api('/api/state', { method: 'GET' });
+      state.files = data;
+      if (!storyBriefInput.value.trim()) {
+        storyBriefInput.value = (data.story_brief && data.story_brief.description) || '';
+      }
+      try { await syncChapterCache(); } catch (_) {}
+      renderCurrentFile();
+      syncFlowState();
+      renderPageContent(state.currentPage);
+      setStatus('项目文件已加载', 'success');
+    }
+
+    function applyOutlineDraft(draft) {
+      state.files.outline_draft = draft;
+      state.currentFile = 'outline_draft';
+      renderCurrentFile();
+      syncFlowState();
+    }
+
+    function applyConfirmedOutline(outline) {
+      state.files.outline = outline;
+      syncFlowState();
+    }
+
+    document.querySelectorAll('#fileTabs .tab-item').forEach(btn => {
+      btn.addEventListener('click', () => { state.currentFile = btn.dataset.file; renderCurrentFile(); });
+    });
+
+    document.getElementById('saveBtn').addEventListener('click', async () => {
+      try {
+        setStatus('正在保存...', 'warning');
+        const payload = JSON.parse(editor.value);
+        await api('/api/save', { method: 'POST', body: JSON.stringify({ name: state.currentFile, json_text: editor.value }) });
+        state.files[state.currentFile] = payload;
+        renderPageContent(state.currentPage);
+        toast(`已保存 ${fileLabels[state.currentFile]}`, 'success');
+        setStatus(`已保存 ${fileLabels[state.currentFile]}`, 'success');
+      } catch (err) {
+        toast(`保存失败：${err.message}`, 'error');
+        setStatus(`保存失败：${err.message}`, 'error');
+      }
+    });
+
+    document.getElementById('generateOutlineBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('generateOutlineBtn');
+      try {
+        const storyBrief = storyBriefInput.value.trim();
+        if (!storyBrief) { toast('请输入故事描述', 'warning'); return; }
+        setLoading(btn, true);
+        state.generating = true;
+        setStatus('正在生成大纲...', 'warning');
+        toast('正在生成大纲，请稍候...', 'info');
+        navigateTo('output');
+        addBubble('user', '你的故事', storyBrief);
+        const assistantBubble = addBubble('assistant', 'AI 创作助手', '');
+        let markdownBuffer = '';
+
+        const payload = await streamApi('/api/generate-outline', { story_brief: storyBrief }, {
+          onChunk: (text) => {
+            markdownBuffer += parseSseChunk(text);
+            if (markdownBuffer.indexOf('```json') !== -1) {
+              assistantBubble.innerHTML = `<div class="label">AI 创作助手</div><div style="line-height:1.5;font-size:13px;">${escapeHtml(markdownBuffer.split('```json')[0])}</div><div style="font-size:12px;color:var(--text-muted);margin-top:8px;">[正在生成结构化数据...]</div>`;
+            } else {
+              assistantBubble.innerHTML = `<div class="label">AI 创作助手</div><div style="line-height:1.5;white-space:pre-wrap;font-size:13px;">${escapeHtml(markdownBuffer)}</div>`;
+            }
+          },
+          onFinal: (finalPayload) => {
+            state.files.story_brief = { description: storyBrief, created_at: finalPayload.record?.generated_at || '', updated_at: finalPayload.record?.generated_at || '' };
+            applyOutlineDraft(finalPayload.outline_draft || {});
+            state.files.conversation_memory = finalPayload.memory || state.files.conversation_memory;
+            assistantBubble.innerHTML = '<div class="label">AI 创作助手</div><div style="line-height:1.5;font-size:13px;">大纲草案已生成！请前往「故事大纲」页面查看并确认。</div>';
+          },
+        });
+        if (payload?.outline_draft) state.files.outline_draft = payload.outline_draft;
+        await loadState();
+        toast('大纲草案已生成，请查看并确认', 'success');
+        setStatus('大纲草案已生成，请查看并确认', 'success');
+      } catch (err) {
+        toast(`生成大纲失败：${err.message}`, 'error');
+        setStatus(`生成大纲失败：${err.message}`, 'error');
+      } finally {
+        setLoading(btn, false);
+        state.generating = false;
+      }
+    });
+
+    document.getElementById('confirmOutlineBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('confirmOutlineBtn');
+      try {
+        setLoading(btn, true);
+        setStatus('正在确认大纲...', 'warning');
+        let outlineJson = editor.value;
+        if (state.currentFile !== 'outline_draft') outlineJson = JSON.stringify(state.files.outline_draft || {}, null, 2);
+        const payload = await api('/api/confirm-outline', {
+          method: 'POST',
+          body: JSON.stringify({ outline_json: outlineJson, story_brief: storyBriefInput.value.trim() }),
+        });
+        applyConfirmedOutline(payload.outline);
+        state.currentFile = 'outline';
+        await loadState();
+        renderCurrentFile();
+        syncFlowState();
+        toast('大纲已确认，可以开始生成章节', 'success');
+        setStatus('大纲已确认，可以开始生成章节', 'success');
+      } catch (err) {
+        toast(`确认大纲失败：${err.message}`, 'error');
+        setStatus(`确认大纲失败：${err.message}`, 'error');
+      } finally {
+        setLoading(btn, false);
+      }
+    });
+
+    document.getElementById('reloadBtn').addEventListener('click', async () => {
+      try {
+        toast('正在刷新...', 'info');
+        await loadState();
+        toast('数据已刷新', 'success');
+      } catch (err) { toast(`加载失败：${err.message}`, 'error'); }
+    });
+
+    async function resetAllData() {
+      const confirmed = await showConfirm('开始新故事', '所有创作数据（大纲、角色、章节等）将被清除，此操作不可撤销。确定要重新开始吗？');
+      if (!confirmed) return;
+      try {
+        setStatus('正在清除...', 'warning');
+        toast('正在清除所有数据...', 'info');
+        streamLog.innerHTML = '';
+        storyBriefInput.value = '';
+        document.getElementById('chapterTitle').value = '';
+        document.getElementById('chapterInstruction').value = '';
+        document.getElementById('chatInput').value = '';
+        state.chapterTexts = {};
+        state.previewChapter = null;
+        state.generating = false;
+        await api('/api/reset', { method: 'POST', body: '{}' });
+        await loadState();
+        navigateTo('story');
+        toast('已清除所有数据，开始新故事吧！', 'success');
+        setStatus('已清除，开始新故事', 'success');
+      } catch (err) {
+        toast(`清除失败：${err.message}`, 'error');
+        setStatus(`清除失败：${err.message}`, 'error');
+      }
+    }
+
+    document.getElementById('resetBtn').addEventListener('click', resetAllData);
+    document.getElementById('newStoryBtn').addEventListener('click', resetAllData);
+
+    document.getElementById('chapterNo').addEventListener('change', function() {
+      showChapterOutline(Number(this.value));
+    });
+
+    document.getElementById('generateBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('generateBtn');
+      try {
+        if (!isOutlineConfirmed()) { toast('请先确认大纲后再生成章节', 'warning'); return; }
+        setLoading(btn, true);
+        state.generating = true;
+        setStatus('正在生成章节...', 'warning');
+        toast('正在生成章节，请稍候...', 'info');
+        navigateTo('output');
+        const chapterNo = Number(document.getElementById('chapterNo').value || 1);
+        const bubblePre = addBubble('assistant', `第 ${chapterNo} 章`, '');
+        let contentBuffer = '';
+        const payload = await streamApi('/api/generate-chapter', {
+          chapter_no: chapterNo,
+          chapter_title: document.getElementById('chapterTitle').value,
+          tone: document.getElementById('chapterTone').value,
+          length_target: Number(document.getElementById('lengthTarget').value || 1800),
+          instruction: document.getElementById('chapterInstruction').value,
+        }, {
+          onChunk: (text) => {
+            contentBuffer += parseSseChunk(text);
+            bubblePre.textContent = contentBuffer;
+            state.chapterTexts[chapterNo] = { title: `第${chapterNo}章`, text: contentBuffer, status: 'draft', updates: {} };
+            state.previewChapter = chapterNo;
+            streamLog.scrollTop = streamLog.scrollHeight;
+          },
+          onFinal: (fp) => {
+            const title = fp.title || `第${chapterNo}章`;
+            state.chapterTexts[chapterNo] = { title, text: fp.chapter_text || contentBuffer, status: fp.status || 'draft', updates: fp.updates || {} };
+            state.previewChapter = chapterNo;
+            if (fp.memory) state.files.conversation_memory = fp.memory;
+            if (fp.needs_user_review) toast('质量检查未完全通过，请人工审核', 'warning', 5000);
+          },
+        });
+        if (payload) {
+          const title = payload.title || `第${chapterNo}章`;
+          state.chapterTexts[chapterNo] = { title, text: payload.chapter_text || contentBuffer, status: payload.status || 'draft', updates: payload.updates || {} };
+        }
+        await loadState();
+        toast(`第 ${(payload || {}).chapter_no ?? chapterNo} 章已生成`, 'success');
+        setStatus(`第 ${(payload || {}).chapter_no ?? chapterNo} 章已生成`, 'success');
+        navigateTo('chapters');
+        renderChaptersPage();
+      } catch (err) {
+        toast(`生成失败：${err.message}`, 'error');
+        setStatus(`生成失败：${err.message}`, 'error');
+      } finally {
+        setLoading(btn, false);
+        state.generating = false;
+      }
+    });
+
+    document.getElementById('viewOutlineBtn').addEventListener('click', () => {
+      navigateTo('outline');
+      renderOutlinePage();
+    });
+
+    document.getElementById('chatBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('chatBtn');
+      try {
+        const message = document.getElementById('chatInput').value.trim();
+        if (!message) { toast('请输入修改指令', 'warning'); return; }
+        const chapterNo = Number(document.getElementById('chatChapterNo').value || 0);
+        setLoading(btn, true);
+        setStatus(`正在修改第 ${chapterNo} 章...`, 'warning');
+        toast(`正在修改第 ${chapterNo} 章...`, 'info');
+        navigateTo('output');
+        const bubblePre = addBubble('assistant', `编辑第 ${chapterNo} 章`, '');
+        let buf = '';
+        const payload = await streamApi('/api/chat', { message, chapter_no: chapterNo }, {
+          onChunk: (text) => {
+            buf += parseSseChunk(text);
+            bubblePre.textContent = buf;
+            if (chapterNo > 0) {
+              state.chapterTexts[chapterNo] = Object.assign({}, state.chapterTexts[chapterNo] || {}, { text: buf, status: 'draft' });
+              state.previewChapter = chapterNo;
+            }
+            streamLog.scrollTop = streamLog.scrollHeight;
+          },
+          onFinal: (fp) => {
+            if (fp.reply && chapterNo > 0) {
+              state.chapterTexts[chapterNo] = Object.assign({}, state.chapterTexts[chapterNo] || {}, {
+                text: fp.reply, status: 'draft',
+                title: (state.chapterTexts[chapterNo] || {}).title || `第${chapterNo}章`,
+                updates: fp.updates || {},
+              });
+              state.previewChapter = chapterNo;
+            }
+          },
+        });
+        await loadState();
+        toast(`第 ${chapterNo} 章已修改（未确认）`, 'success');
+        setStatus(`第 ${chapterNo} 章已修改（未确认）`, 'success');
+      } catch (err) {
+        toast(`修改失败：${err.message}`, 'error');
+        setStatus(`修改失败：${err.message}`, 'error');
+      } finally {
+        setLoading(btn, false);
+      }
+    });
+
+    let autoGenAbort = false;
+    let autoGenController = null;
+
+    document.getElementById('autoGenBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('autoGenBtn');
+      const stopBtn = document.getElementById('autoGenStopBtn');
+      const progressDiv = document.getElementById('autoGenProgress');
+      const statusEl = document.getElementById('autoGenStatus');
+      const counterEl = document.getElementById('autoGenCounter');
+      const progressBar = document.getElementById('autoGenProgressBar');
+      const logEl = document.getElementById('autoGenLog');
+
+      if (!isOutlineConfirmed()) { toast('请先确认大纲后再自动续写', 'warning'); return; }
+      if (state.generating) { toast('正在生成中，请等待完成', 'warning'); return; }
+
+      const count = Math.min(20, Math.max(1, Number(document.getElementById('autoGenCount').value) || 3));
+      const instruction = document.getElementById('autoGenInstruction').value.trim();
+      const nos = Object.keys(state.chapterTexts).filter(n => state.chapterTexts[n] !== null).map(Number);
+      const startNo = nos.length > 0 ? Math.max(...nos) + 1 : 1;
+
+      autoGenAbort = false;
+      state.generating = true;
+      setLoading(btn, true);
+      stopBtn.style.display = '';
+      progressDiv.style.display = '';
+      logEl.innerHTML = '';
+      statusEl.textContent = '正在规划章节...';
+      counterEl.textContent = `0/${count}`;
+      progressBar.style.width = '0%';
+
+      const addLog = (text, cls = '') => {
+        const div = document.createElement('div');
+        div.className = `log-item ${cls}`;
+        div.textContent = text;
+        logEl.appendChild(div);
+        logEl.scrollTop = logEl.scrollHeight;
+      };
+
+      try {
+        autoGenController = new AbortController();
+        const res = await fetch('/api/auto-generate-chapters?stream=1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+          body: JSON.stringify({ start_chapter_no: startNo, count, instruction, auto_confirm: true }),
+          signal: autoGenController.signal,
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+        if (!res.body) throw new Error('未收到流式响应');
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let currentChapterText = '';
+        let planTotal = count;
+        let streamFailed = false;
+        let streamCompleted = false;
+
+        while (true) {
+          if (autoGenAbort) break;
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let idx;
+          while ((idx = buffer.indexOf('\n\n')) >= 0) {
+            const frame = buffer.slice(0, idx);
+            buffer = buffer.slice(idx + 2);
+            if (!frame.trim()) continue;
+
+            const { event, data: rawData } = parseSseFrame(frame);
+            if (!rawData) continue;
+            let data;
+            try { data = JSON.parse(rawData); } catch { continue; }
+
+            if (event === 'error' || event === 'chapter_error') {
+              streamFailed = true;
+              addLog(`❌ 错误：${data.error || '自动续写失败'}`, 'error');
+              throw new Error(data.error || '自动续写失败');
+            } else if (data.phase === 'planning') {
+              statusEl.textContent = 'AI 正在规划章节...';
+              addLog('📋 正在规划章节...', 'active');
+            } else if (data.chapters && data.total) {
+              planTotal = data.total;
+              counterEl.textContent = `0/${planTotal}`;
+              addLog(`📋 规划完成：${planTotal} 个章节`, 'done');
+              data.chapters.forEach(ch => {
+                addLog(`  第${ch.chapter_no}章：${ch.goal || '待定'}（约${ch.target_words}字）`);
+              });
+            } else if (data.chapter_no && data.goal && data.index) {
+              currentChapterText = '';
+              statusEl.textContent = `正在生成第 ${data.index}/${data.total} 章...`;
+              counterEl.textContent = `${data.index - 1}/${data.total}`;
+              progressBar.style.width = `${((data.index - 1) / data.total) * 100}%`;
+              addLog(`✍️ 开始生成第${data.chapter_no}章：${data.goal}`, 'active');
+            } else if (data.text && data.chapter_no) {
+              currentChapterText += data.text;
+              if (state.chapterTexts[data.chapter_no]) {
+                state.chapterTexts[data.chapter_no].text = currentChapterText;
+              } else {
+                state.chapterTexts[data.chapter_no] = { title: `第${data.chapter_no}章`, text: currentChapterText, status: 'draft', updates: {} };
+              }
+              state.previewChapter = data.chapter_no;
+            } else if (data.chapter_no && data.chapter_text && data.index) {
+              state.chapterTexts[data.chapter_no] = {
+                title: data.title || `第${data.chapter_no}章`,
+                text: data.chapter_text,
+                status: 'draft',
+                updates: {},
+              };
+              state.previewChapter = data.chapter_no;
+              counterEl.textContent = `${data.index}/${data.total}`;
+              progressBar.style.width = `${(data.index / data.total) * 100}%`;
+              addLog(`✅ 第${data.chapter_no}章已生成（约${data.current_words}字）`, 'done');
+            } else if (data.chapter_no && data.title && !data.chapter_text) {
+              state.chapterTexts[data.chapter_no] = Object.assign({}, state.chapterTexts[data.chapter_no] || {}, {
+                title: data.title,
+                status: 'confirmed',
+              });
+              addLog(`✓ 第${data.chapter_no}章《${data.title}》已确认`, 'done');
+            } else if (data.total_chapters !== undefined) {
+              streamCompleted = true;
+              statusEl.textContent = '全部完成！';
+              counterEl.textContent = `${planTotal}/${planTotal}`;
+              progressBar.style.width = '100%';
+              addLog(`🎉 全部 ${data.total_chapters} 章已生成并确认！`, 'done');
+            }
+          }
+        }
+
+        if (autoGenAbort) throw new DOMException('用户已停止自动续写', 'AbortError');
+        if (streamFailed) throw new Error('自动续写失败');
+        if (!streamCompleted) throw new Error('自动续写被中断，请重试');
+
+        await loadState();
+        syncFlowState();
+        renderChaptersPage();
+        toast(`自动续写完成，共生成 ${planTotal} 个章节`, 'success');
+        setStatus(`自动续写完成`, 'success');
+      } catch (err) {
+        if (err.name === 'AbortError' || autoGenAbort) {
+          toast('自动续写已停止', 'warning');
+          setStatus('自动续写已停止', 'warning');
+          addLog('⏹️ 自动续写已停止', 'warning');
+        } else {
+          toast(`自动续写失败：${err.message}`, 'error');
+          setStatus(`自动续写失败：${err.message}`, 'error');
+          addLog(`❌ 失败：${err.message}`, 'error');
+        }
+      } finally {
+        state.generating = false;
+        autoGenController = null;
+        setLoading(btn, false);
+        stopBtn.style.display = 'none';
+      }
+    });
+
+    document.getElementById('autoGenStopBtn').addEventListener('click', () => {
+      autoGenAbort = true;
+      toast('正在停止自动续写...', 'warning');
+      autoGenController?.abort();
+    });
+
+    async function confirmChapter(chapterNo) {
+      try {
+        setStatus(`正在确认第 ${chapterNo} 章...`, 'warning');
+        toast(`正在确认第 ${chapterNo} 章...`, 'info');
+        const data = await api('/api/confirm-chapter', {
+          method: 'POST',
+          body: JSON.stringify({ chapter_no: chapterNo }),
+        });
+        if (state.chapterTexts[chapterNo]) {
+          state.chapterTexts[chapterNo] = Object.assign({}, state.chapterTexts[chapterNo], {
+            status: 'confirmed',
+            title: data.title || state.chapterTexts[chapterNo].title,
+            updates: data.updates || {},
+          });
+        }
+        if (data.memory) state.files.conversation_memory = data.memory;
+        await loadState();
+        state.previewChapter = chapterNo;
+        renderChaptersPage();
+        toast(`第 ${chapterNo} 章已确认，故事线/角色已更新`, 'success');
+        setStatus(`第 ${chapterNo} 章已确认，故事线/角色已更新`, 'success');
+      } catch (err) {
+        toast(`确认失败：${err.message}`, 'error');
+        setStatus(`确认失败：${err.message}`, 'error');
+      }
+    }
+
+    loadState().catch(err => setStatus(`初始化失败：${err.message}`, 'error'));
+  </script>
+</body>
+</html>
