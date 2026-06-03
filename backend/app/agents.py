@@ -142,6 +142,14 @@ def merge_dialogue_summary(current: Dict[str, Any], patch: Dict[str, Any]) -> Di
     return merged
 
 
+def _safe_turn_id(t: dict) -> int:
+    """Return turn_id as int, falling back to 0 for missing/non-numeric values."""
+    try:
+        return int(t.get("turn_id", 0))
+    except (ValueError, TypeError):
+        return 0
+
+
 def compact_recent_turns(memory: Dict[str, Any]) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
     turns = list(memory.get("recent_turns", []))
     chapter_turns = [t for t in turns if t.get("type") == "chapter"]
@@ -151,7 +159,7 @@ def compact_recent_turns(memory: Dict[str, Any]) -> tuple[Dict[str, Any], List[D
         return memory, []
     removed = other_turns[:-CHAT_WINDOW]
     retained_other = other_turns[-CHAT_WINDOW:]
-    all_retained = sorted(chapter_turns + retained_other, key=lambda t: int(t.get("turn_id", 0)))
+    all_retained = sorted(chapter_turns + retained_other, key=_safe_turn_id)
     memory["recent_turns"] = all_retained
     return memory, removed
 
@@ -189,7 +197,7 @@ def compact_chapter_turns(memory: dict) -> dict:
     turns = list(memory.get("recent_turns", []))
     chapter_turns = sorted(
         [t for t in turns if t.get("type") == "chapter" and t.get("confirmed", False)],
-        key=lambda t: int(t.get("turn_id", 0))
+        key=_safe_turn_id
     )
     other_turns = [t for t in turns if not (t.get("type") == "chapter" and t.get("confirmed", False))]
 
@@ -233,7 +241,7 @@ def compact_chapter_turns(memory: dict) -> dict:
     # 更新 recent_turns：保留非 confirmed chapter turns + 热窗口 chapter turns
     memory["recent_turns"] = sorted(
         other_turns + retained_chapters,
-        key=lambda t: int(t.get("turn_id", 0))
+        key=_safe_turn_id
     )
     return memory
 
