@@ -700,6 +700,9 @@
         </div>
       </div>
       <div class="header-actions">
+        <button class="btn btn-secondary btn-sm" id="undoBtn" title="" disabled>
+          <span>↩</span> <span class="hide-mobile">撤回</span>
+        </button>
         <button class="btn btn-ghost btn-sm" id="reloadBtn" title="刷新数据">
           <span>↻</span> <span class="hide-mobile">刷新</span>
         </button>
@@ -1156,6 +1159,25 @@
       </div>`;
     }
 
+    const charFieldLabels = {
+      appearance: '外貌',
+      personality: '性格',
+      motivation: '动机',
+      constraints: '约束',
+      current_state: '当前状态',
+    };
+
+    const stateFieldLabels = {
+      location: '位置',
+      mood: '情绪',
+      injury: '伤势',
+      known_information: '已知信息',
+      unknown_information: '未知信息',
+    };
+
+    // Fixed display order for character fields
+    const charFieldOrder = ['appearance', 'personality', 'motivation', 'constraints', 'current_state'];
+
     function renderCharactersPage() {
       const chars = state.files.characters?.characters || [];
       const container = document.getElementById('charactersContent');
@@ -1173,20 +1195,36 @@
 
       container.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">' + chars.map(c => {
         let fieldsHtml = '';
-        for (const [k, v] of Object.entries(c)) {
-          if (['id', 'name', 'role'].includes(k)) continue;
-          let displayVal;
-          if (Array.isArray(v)) { displayVal = v.length > 0 ? v.join('、') : '无'; }
-          else if (v !== null && typeof v === 'object') {
-            const subFields = Object.entries(v).map(([sk, sv]) => {
-              const sv2 = Array.isArray(sv) ? sv.join('、') : String(sv);
-              return `<span style="color:var(--text-muted);">${escapeHtml(sk)}:</span> ${escapeHtml(sv2)}`;
-            }).join(' · ');
-            fieldsHtml += `<div class="character-detail"><span style="color:var(--text-secondary);font-weight:500;">${escapeHtml(k)}：</span>${subFields}</div>`;
+
+        for (const k of charFieldOrder) {
+          const v = c[k];
+          const label = charFieldLabels[k] || k;
+
+          if (k === 'current_state' && v && typeof v === 'object') {
+            const stateParts = [];
+            for (const [sk, sv] of Object.entries(v)) {
+              const sLabel = stateFieldLabels[sk] || sk;
+              let sVal;
+              if (Array.isArray(sv)) { sVal = sv.length > 0 ? sv.join('、') : ''; }
+              else { sVal = (sv !== null && sv !== undefined && sv !== '') ? String(sv) : ''; }
+              if (sVal) stateParts.push(`<span style="color:var(--text-muted);">${escapeHtml(sLabel)}:</span> ${escapeHtml(sVal)}`);
+            }
+            if (stateParts.length > 0) {
+              fieldsHtml += `<div class="character-detail"><span style="color:var(--text-secondary);font-weight:500;">${escapeHtml(label)}：</span>${stateParts.join(' · ')}</div>`;
+            }
             continue;
-          } else { displayVal = (v !== null && v !== undefined && v !== '') ? String(v) : '无'; }
-          fieldsHtml += `<div class="character-detail"><span style="color:var(--text-secondary);font-weight:500;">${escapeHtml(k)}：</span>${escapeHtml(displayVal)}</div>`;
+          }
+
+          if (Array.isArray(v)) {
+            if (v.length === 0) continue;
+            fieldsHtml += `<div class="character-detail"><span style="color:var(--text-secondary);font-weight:500;">${escapeHtml(label)}：</span>${escapeHtml(v.join('、'))}</div>`;
+          } else {
+            const displayVal = (v !== null && v !== undefined && v !== '') ? String(v) : '';
+            if (!displayVal) continue;
+            fieldsHtml += `<div class="character-detail"><span style="color:var(--text-secondary);font-weight:500;">${escapeHtml(label)}：</span>${escapeHtml(displayVal)}</div>`;
+          }
         }
+
         return `<div class="character-card"><div style="margin-bottom:8px;"><span class="character-name">${escapeHtml(c.name || '未命名')}</span><span class="character-role">${escapeHtml(c.role || '')}</span></div>${fieldsHtml}</div>`;
       }).join('') + '</div>';
     }
@@ -1345,11 +1383,13 @@
           if (data.chapter_text) {
             state.chapterTexts[no] = chapterRecordToViewModel(no, data);
             renderChaptersPage();
+            document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
           }
         }).catch(() => {});
         return;
       }
       renderChaptersPage();
+      document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function renderCurrentFile() {
@@ -1425,6 +1465,7 @@
       syncFlowState();
       renderPageContent(state.currentPage);
       setStatus('项目文件已加载', 'success');
+      refreshUndoState();
     }
 
     function applyOutlineDraft(draft) {
@@ -1688,6 +1729,7 @@
       const nos = Object.keys(state.chapterTexts).filter(n => state.chapterTexts[n] !== null).map(Number);
       const startNo = nos.length > 0 ? Math.max(...nos) + 1 : 1;
 
+      const savedPreviewChapter = state.previewChapter;
       autoGenAbort = false;
       state.generating = true;
       setLoading(btn, true);
@@ -1771,7 +1813,6 @@
               } else {
                 state.chapterTexts[data.chapter_no] = { title: `第${data.chapter_no}章`, text: currentChapterText, status: 'draft', updates: {} };
               }
-              state.previewChapter = data.chapter_no;
             } else if (data.chapter_no && data.chapter_text && data.index) {
               state.chapterTexts[data.chapter_no] = {
                 title: data.title || `第${data.chapter_no}章`,
@@ -1779,7 +1820,6 @@
                 status: 'draft',
                 updates: {},
               };
-              state.previewChapter = data.chapter_no;
               counterEl.textContent = `${data.index}/${data.total}`;
               progressBar.style.width = `${(data.index / data.total) * 100}%`;
               addLog(`✅ 第${data.chapter_no}章已生成（约${data.current_words}字）`, 'done');
@@ -1804,9 +1844,13 @@
         if (!streamCompleted) throw new Error('自动续写被中断，请重试');
 
         await loadState();
+        if (savedPreviewChapter !== null && state.chapterTexts[savedPreviewChapter]) {
+          state.previewChapter = savedPreviewChapter;
+        }
         syncFlowState();
         renderChaptersPage();
         toast(`自动续写完成，共生成 ${planTotal} 个章节`, 'success');
+        refreshUndoState();
         setStatus(`自动续写完成`, 'success');
       } catch (err) {
         if (err.name === 'AbortError' || autoGenAbort) {
@@ -1853,13 +1897,53 @@
         renderChaptersPage();
         toast(`第 ${chapterNo} 章已确认，故事线/角色已更新`, 'success');
         setStatus(`第 ${chapterNo} 章已确认，故事线/角色已更新`, 'success');
+        refreshUndoState();
       } catch (err) {
         toast(`确认失败：${err.message}`, 'error');
         setStatus(`确认失败：${err.message}`, 'error');
       }
     }
 
+    async function refreshUndoState() {
+      try {
+        const data = await api('/api/snapshots', { method: 'GET' });
+        const btn = document.getElementById('undoBtn');
+        if (data.snapshots && data.snapshots.length > 0) {
+          btn.disabled = false;
+          btn.title = `上次操作：${data.snapshots[0].label}`;
+        } else {
+          btn.disabled = true;
+          btn.title = '';
+        }
+      } catch (_) {}
+    }
+
+    document.getElementById('undoBtn').addEventListener('click', async () => {
+      if (!confirm('确定要撤回上次操作吗？此操作不可再次撤回。')) return;
+      const btn = document.getElementById('undoBtn');
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span>↩</span> <span class="hide-mobile">撤回中…</span>';
+      try {
+        const data = await api('/api/undo', { method: 'POST' });
+        if (data.ok) {
+          await loadState();
+          syncFlowState();
+          renderChaptersPage();
+          toast('已撤回：' + data.restored, 'success');
+        } else {
+          toast(data.error || '撤回失败', 'error');
+        }
+      } catch (err) {
+        toast(err.message || '撤回失败', 'error');
+      } finally {
+        btn.innerHTML = originalHtml;
+        refreshUndoState();
+      }
+    });
+
     loadState().catch(err => setStatus(`初始化失败：${err.message}`, 'error'));
+    refreshUndoState();
   </script>
 </body>
 </html>

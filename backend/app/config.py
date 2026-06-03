@@ -31,6 +31,7 @@ load_env_file()
 
 DATA_DIR = REPO_ROOT / "data"
 CHAPTER_DIR = DATA_DIR / "chapters"
+SNAPSHOT_DIR = DATA_DIR / "snapshots"
 STATIC_DIR = REPO_ROOT / "frontend"
 
 OUTLINE_PATH = DATA_DIR / "outline.json"

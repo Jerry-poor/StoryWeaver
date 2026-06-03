@@ -4,6 +4,7 @@ import json
 import traceback
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
@@ -37,6 +38,9 @@ from backend.app.storage import (
     save_instruction_registry,
     normalize_outline_shape,
     utc_now,
+    create_snapshot,
+    restore_snapshot,
+    list_snapshots,
 )
 from backend.app.llm import (
     deepseek_chat,
@@ -188,6 +192,9 @@ class Handler(BaseHTTPRequestHandler):
                 with FILE_LOCK:
                     self._send_json(HTTPStatus.OK, load_json(chapter_path, {}))
                 return
+            if path == "/api/snapshots":
+                self._send_json(HTTPStatus.OK, {"snapshots": list_snapshots()})
+                return
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
         except ClientDisconnectedError:
             return
@@ -265,6 +272,17 @@ class Handler(BaseHTTPRequestHandler):
                     self.handle_auto_generate_chapters_stream(body)
                 else:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": "only stream mode is supported for auto-generate-chapters"})
+                return
+            if path == "/api/undo":
+                snapshots = list_snapshots()
+                if not snapshots:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "没有可撤回的操作"})
+                    return
+                latest = snapshots[0]
+                with FILE_LOCK:
+                    restore_snapshot(Path(latest["path"]))
+                    state = read_state()
+                self._send_json(HTTPStatus.OK, {"ok": True, "restored": latest["name"], "state": state})
                 return
             if path == "/api/reset":
                 with FILE_LOCK:
@@ -437,6 +455,7 @@ class Handler(BaseHTTPRequestHandler):
             save_json(OUTLINE_DRAFT_PATH, confirmed)
             save_json(OUTLINE_PATH, confirmed)
         reset_generated_story_state(confirmed)
+        create_snapshot("confirm_outline")
         self._send_json(
             HTTPStatus.OK,
             {
@@ -482,7 +501,8 @@ class Handler(BaseHTTPRequestHandler):
         ]
         result = short_chat_response(messages)
         updates = {}
-        if chapter_no > 0 and chapter_text:
+        if chapter_no > 0:
+            ch_path = now_chapter_path(chapter_no)
             updates = extract_chapter_updates(state, chapter_no, result)
             chapter_title = chapter_title_from_updates(chapter_no, updates)
             storyline = update_storyline(state["storyline"], chapter_no, chapter_title, updates)
@@ -491,16 +511,37 @@ class Handler(BaseHTTPRequestHandler):
                 list(updates.get("character_updates", [])),
                 list(updates.get("new_characters", [])),
             )
-            ch_path = now_chapter_path(chapter_no)
             with FILE_LOCK:
-                rec = load_json(ch_path, {})
+                rec = load_json(ch_path, default_chapter_draft(chapter_no))
                 rec["chapter_text"] = result
+                rec["title"] = chapter_title or rec.get("title", f"第{chapter_no}章")
                 rec["last_edited_at"] = utc_now()
                 rec["status"] = "draft"
+                rec["chapter_summary"] = updates.get("chapter_summary", [])
+                rec["new_events"] = updates.get("new_events", [])
+                rec["open_threads"] = updates.get("open_threads", [])
+                rec["resolved_threads"] = updates.get("resolved_threads", [])
+                rec["character_updates"] = updates.get("character_updates", [])
                 save_json(ch_path, rec)
                 save_json(CHARACTERS_PATH, characters)
                 save_json(STORYLINE_PATH, storyline)
-        self._send_json(HTTPStatus.OK, {"ok": True, "reply": result, "updates": updates if chapter_no > 0 and chapter_text else {}})
+                memory = load_json(CONVERSATION_PATH, default_conversation_memory())
+                memory = append_turn(
+                    memory,
+                    f"修改第{chapter_no}章。{user_message}",
+                    f"已根据指令修改第{chapter_no}章《{chapter_title}》。",
+                    turn_type="chapter",
+                    chapter_no=chapter_no,
+                )
+                memory, removed_turns = compact_recent_turns(memory)
+                if removed_turns:
+                    memory["dialogue_summary"] = summarize_old_turns(
+                        removed_turns,
+                        memory.get("dialogue_summary", default_conversation_memory()["dialogue_summary"]),
+                    )
+                save_json(CONVERSATION_PATH, memory)
+            update_continuity_from_updates(updates)
+        self._send_json(HTTPStatus.OK, {"ok": True, "reply": result, "updates": updates})
 
     def handle_chat_stream(self, body: Dict[str, Any]) -> None:
         user_message = str(body.get("message", "")).strip()
@@ -546,7 +587,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_sse_event("chunk", {"text": chunk})
             result = "".join(parts)
             updates = {}
-            if chapter_no > 0 and chapter_text:
+            if chapter_no > 0:
+                ch_path = now_chapter_path(chapter_no)
                 updates = extract_chapter_updates(state, chapter_no, result)
                 chapter_title = chapter_title_from_updates(chapter_no, updates)
                 storyline = update_storyline(state["storyline"], chapter_no, chapter_title, updates)
@@ -555,16 +597,37 @@ class Handler(BaseHTTPRequestHandler):
                     list(updates.get("character_updates", [])),
                     list(updates.get("new_characters", [])),
                 )
-                ch_path = now_chapter_path(chapter_no)
                 with FILE_LOCK:
-                    rec = load_json(ch_path, {})
+                    rec = load_json(ch_path, default_chapter_draft(chapter_no))
                     rec["chapter_text"] = result
+                    rec["title"] = chapter_title or rec.get("title", f"第{chapter_no}章")
                     rec["last_edited_at"] = utc_now()
                     rec["status"] = "draft"
+                    rec["chapter_summary"] = updates.get("chapter_summary", [])
+                    rec["new_events"] = updates.get("new_events", [])
+                    rec["open_threads"] = updates.get("open_threads", [])
+                    rec["resolved_threads"] = updates.get("resolved_threads", [])
+                    rec["character_updates"] = updates.get("character_updates", [])
                     save_json(ch_path, rec)
                     save_json(CHARACTERS_PATH, characters)
                     save_json(STORYLINE_PATH, storyline)
-            self._send_sse_event("final", {"ok": True, "reply": result, "chapter_no": chapter_no, "updates": updates if chapter_no > 0 and chapter_text else {}})
+                    memory = load_json(CONVERSATION_PATH, default_conversation_memory())
+                    memory = append_turn(
+                        memory,
+                        f"修改第{chapter_no}章。{user_message}",
+                        f"已根据指令修改第{chapter_no}章《{chapter_title}》。",
+                        turn_type="chapter",
+                        chapter_no=chapter_no,
+                    )
+                    memory, removed_turns = compact_recent_turns(memory)
+                    if removed_turns:
+                        memory["dialogue_summary"] = summarize_old_turns(
+                            removed_turns,
+                            memory.get("dialogue_summary", default_conversation_memory()["dialogue_summary"]),
+                        )
+                    save_json(CONVERSATION_PATH, memory)
+                update_continuity_from_updates(updates)
+            self._send_sse_event("final", {"ok": True, "reply": result, "chapter_no": chapter_no, "updates": updates})
         except Exception as exc:
             self._send_sse_event("error", {"error": str(exc)})
 
@@ -656,6 +719,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
             with FILE_LOCK:
                 save_json(CONVERSATION_PATH, memory)
+            create_snapshot(f"generate_ch{chapter_no}")
             self._send_sse_event(
                 "final",
                 {
@@ -765,6 +829,7 @@ class Handler(BaseHTTPRequestHandler):
             save_json(STORYLINE_PATH, storyline)
             save_json(CONVERSATION_PATH, memory)
             save_json(now_chapter_path(chapter_no), chapter_record)
+        create_snapshot(f"generate_ch{chapter_no}")
         self._send_json(HTTPStatus.OK, {
             "ok": True,
             "chapter_no": chapter_no,
@@ -841,6 +906,7 @@ class Handler(BaseHTTPRequestHandler):
             save_json(CONVERSATION_PATH, memory)
             save_json(chapter_path, chapter_record)
         update_continuity_from_updates(updates)
+        create_snapshot(f"confirm_ch{chapter_no}")
         self._send_json(HTTPStatus.OK, {
             "ok": True,
             "chapter_no": chapter_no,
@@ -1360,6 +1426,7 @@ class Handler(BaseHTTPRequestHandler):
                     save_json(CONVERSATION_PATH, memory)
                     save_json(chapter_path, chapter_record)
                 update_continuity_from_updates(updates)
+                create_snapshot(f"autogen_ch{chapter_no}")
                 self._send_sse_event("chapter_confirmed", {
                     "chapter_no": chapter_no,
                     "title": ch_title,

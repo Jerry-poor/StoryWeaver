@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -12,6 +13,7 @@ from backend.app.config import (
     CONTINUITY_PATH,
     DATA_DIR,
     CHAPTER_DIR,
+    SNAPSHOT_DIR,
     STATIC_DIR,
     OUTLINE_PATH,
     OUTLINE_DRAFT_PATH,
@@ -30,6 +32,7 @@ def utc_now() -> str:
 def ensure_dirs() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     CHAPTER_DIR.mkdir(parents=True, exist_ok=True)
+    SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
     STATIC_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -126,7 +129,9 @@ def default_ending_state() -> Dict[str, Any]:
         "immediate_unresolved_question": "",
         "scene_continues": False,
         "recommended_next_opening": "",
-        "scene_continues": False,
+        # 因果驱动：上一章结尾留下的、应当推动下一章开场的具体后果/决定/行动，
+        # 即使场景已切换，下一章也应从这个驱动力接起，而不是用通用时间过场开场。
+        "next_chapter_driver": "",
     }
 
 
@@ -137,6 +142,9 @@ def default_continuity_contract() -> Dict[str, Any]:
         "must_not_change_location_immediately": False,
         "opening_requirement": "",
         "allowed_transition_after_words": 0,
+        # 叙事/因果接续要求：始终生效（即使 scene_continues=false）。
+        # 描述下一章开头应承接的具体后果或动机，禁止用通用时间过场开场。
+        "narrative_continuity_requirement": "",
     }
 
 
@@ -335,3 +343,99 @@ def load_continuity() -> Dict[str, Any]:
 def save_continuity(data: Dict[str, Any]) -> None:
     data["updated_at"] = utc_now()
     save_json(CONTINUITY_PATH, data)
+
+
+# ---------------------------------------------------------------------------
+# Snapshot helpers
+# ---------------------------------------------------------------------------
+
+_SNAPSHOT_DATA_FILES = [
+    OUTLINE_PATH,
+    OUTLINE_DRAFT_PATH,
+    STORY_BRIEF_PATH,
+    CHARACTERS_PATH,
+    STORYLINE_PATH,
+    CONVERSATION_PATH,
+    CONTINUITY_PATH,
+    INSTRUCTION_REGISTRY_PATH,
+]
+
+
+def create_snapshot(label: str) -> Path:
+    """Copy all current data files into snapshots/<timestamp>_<label>/."""
+    SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_label = "".join(c if c.isalnum() or c in "-_" else "_" for c in label)
+    snap_dir = SNAPSHOT_DIR / f"{ts}_{safe_label}"
+    snap_dir.mkdir(parents=True, exist_ok=True)
+
+    for src in _SNAPSHOT_DATA_FILES:
+        if src.exists():
+            shutil.copy2(src, snap_dir / src.name)
+
+    snap_chapter_dir = snap_dir / "chapters"
+    snap_chapter_dir.mkdir(parents=True, exist_ok=True)
+    for src in sorted(CHAPTER_DIR.glob("chapter_*.json")):
+        shutil.copy2(src, snap_chapter_dir / src.name)
+
+    cleanup_old_snapshots(keep=10)
+    return snap_dir
+
+
+def restore_snapshot(snapshot_path: Path) -> None:
+    """Restore all files from snapshot_path back into the data directory."""
+    if not snapshot_path.exists():
+        raise FileNotFoundError(f"Snapshot not found: {snapshot_path}")
+
+    for src in snapshot_path.iterdir():
+        if src.is_file() and src.suffix == ".json":
+            shutil.copy2(src, DATA_DIR / src.name)
+
+    snap_chapter_dir = snapshot_path / "chapters"
+    if snap_chapter_dir.exists():
+        for existing in CHAPTER_DIR.glob("chapter_*.json"):
+            try:
+                existing.unlink()
+            except FileNotFoundError:
+                pass
+        for src in sorted(snap_chapter_dir.glob("chapter_*.json")):
+            shutil.copy2(src, CHAPTER_DIR / src.name)
+
+    shutil.rmtree(snapshot_path, ignore_errors=True)
+
+
+def list_snapshots() -> List[Dict[str, Any]]:
+    """Return snapshots sorted newest-first."""
+    if not SNAPSHOT_DIR.exists():
+        return []
+    entries: List[Dict[str, Any]] = []
+    for snap_dir in SNAPSHOT_DIR.iterdir():
+        if not snap_dir.is_dir():
+            continue
+        name = snap_dir.name
+        parts = name.split("_", 2)
+        if len(parts) >= 3:
+            try:
+                created_at = datetime.strptime(f"{parts[0]}_{parts[1]}", "%Y%m%d_%H%M%S").isoformat()
+            except ValueError:
+                created_at = ""
+            label = parts[2]
+        else:
+            label = name
+            created_at = ""
+        entries.append({"name": name, "path": str(snap_dir), "label": label, "created_at": created_at})
+    entries.sort(key=lambda e: e["name"], reverse=True)
+    return entries
+
+
+def cleanup_old_snapshots(keep: int = 10) -> None:
+    """Delete the oldest snapshots, retaining only the newest *keep* entries."""
+    if not SNAPSHOT_DIR.exists():
+        return
+    snap_dirs = sorted(
+        [d for d in SNAPSHOT_DIR.iterdir() if d.is_dir()],
+        key=lambda d: d.name,
+        reverse=True,
+    )
+    for old_dir in snap_dirs[keep:]:
+        shutil.rmtree(old_dir, ignore_errors=True)
