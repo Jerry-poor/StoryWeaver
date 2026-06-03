@@ -86,6 +86,15 @@ class ClientDisconnectedError(ConnectionError):
     pass
 
 
+def drain_generation_memory(state: Dict[str, Any]) -> Dict[str, Any]:
+    memory = state.get("conversation_memory") or default_conversation_memory()
+    memory = drain_arc_compression(memory)
+    state["conversation_memory"] = memory
+    with FILE_LOCK:
+        save_json(CONVERSATION_PATH, memory)
+    return memory
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -649,8 +658,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         with FILE_LOCK:
             state = read_state()
-        memory = state["conversation_memory"]
-        memory = drain_arc_compression(memory)
+        memory = drain_generation_memory(state)
         context = build_generation_context(state, chapter_no, instruction, tone, length_target)
         current_user_content = json.dumps(context, ensure_ascii=False, indent=2)
         chapter_task_content = json.dumps(context.get("chapter_task", {}), ensure_ascii=False, indent=2)
@@ -666,7 +674,14 @@ class Handler(BaseHTTPRequestHandler):
             raw_text = "".join(parts)
             revised_text, quality_reports, needs_user_review = run_chapter_quality_pipeline(raw_text, context)
             chapter_text = revised_text
-            chapter_title = chapter_title_hint or f"第{chapter_no}章"
+            updates = extract_chapter_updates(state, chapter_no, chapter_text)
+            chapter_title = chapter_title_hint or chapter_title_from_updates(chapter_no, updates)
+            storyline = update_storyline(state["storyline"], chapter_no, chapter_title, updates)
+            characters = merge_character_updates(
+                state["characters"],
+                list(updates.get("character_updates", [])),
+                list(updates.get("new_characters", [])),
+            )
             wc = chapter_word_count(chapter_text)
             chapter_record = {
                 "chapter_no": chapter_no,
@@ -695,8 +710,10 @@ class Handler(BaseHTTPRequestHandler):
             if revised_text != raw_text:
                 chapter_record["raw_text_before_revision"] = raw_text
             with FILE_LOCK:
+                save_json(CHARACTERS_PATH, characters)
+                save_json(STORYLINE_PATH, storyline)
                 save_json(now_chapter_path(chapter_no), chapter_record)
-            assistant_summary = f"已生成第{chapter_no}章《{chapter_title}》。"
+            assistant_summary = f"已生成第{chapter_no}章《{chapter_title}》，并同步更新故事线与角色状态。"
             if wc:
                 assistant_summary += f" 章节长度约 {wc} 个词块。"
             if needs_user_review:
@@ -710,7 +727,7 @@ class Handler(BaseHTTPRequestHandler):
                     turn_type="chapter",
                     chapter_no=chapter_no,
                     extra_fields={
-                        "user_prompt_text": chapter_task_content,
+                        "user_prompt_text": current_user_content,
                         "assistant_text": chapter_text,
                     },
                 )
@@ -731,6 +748,7 @@ class Handler(BaseHTTPRequestHandler):
                     "title": chapter_title,
                     "chapter_text": chapter_text,
                     "status": "draft",
+                    "updates": updates,
                     "quality_reports": quality_reports,
                     "needs_user_review": needs_user_review,
                     "memory": memory,
@@ -758,8 +776,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         with FILE_LOCK:
             state = read_state()
-        memory = state["conversation_memory"]
-        memory = drain_arc_compression(memory)
+        memory = drain_generation_memory(state)
         context = build_generation_context(state, chapter_no, instruction, tone, length_target)
         current_user_content = json.dumps(context, ensure_ascii=False, indent=2)
         system_prompt = build_chapter_system_prompt(length_target)
@@ -806,7 +823,7 @@ class Handler(BaseHTTPRequestHandler):
             "chapter_no": chapter_no,
             "generation_mode": "single_segment",
             "status": "draft",
-            "title": chapter_title_hint or f"第{chapter_no}章",
+            "title": chapter_title,
             "target_words": length_target,
             "current_words": wc,
             "generated_at": utc_now(),
@@ -930,6 +947,7 @@ class Handler(BaseHTTPRequestHandler):
             if not outline_is_confirmed(state.get("outline", {})):
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": "outline must be confirmed first"})
                 return
+        drain_generation_memory(state)
         draft = start_chapter_generation(state, chapter_no, instruction, tone, target_words)
         with FILE_LOCK:
             save_json(now_chapter_path(chapter_no), draft)
@@ -958,6 +976,7 @@ class Handler(BaseHTTPRequestHandler):
             if not outline_is_confirmed(state.get("outline", {})):
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": "outline must be confirmed first"})
                 return
+        drain_generation_memory(state)
         generation_mode = "multi_segment" if target_words > 4000 else "single_segment"
         self._send_sse_headers()
         self._send_sse_event("meta", {
@@ -973,9 +992,9 @@ class Handler(BaseHTTPRequestHandler):
         draft["length_target"] = target_words
         draft["generated_at"] = utc_now()
         context = build_generation_context(state, chapter_no, instruction, tone, target_words)
+        draft["chapter_task_content"] = json.dumps(context.get("chapter_task", {}), ensure_ascii=False, indent=2)
         if generation_mode == "single_segment":
             memory = state["conversation_memory"]
-            memory = drain_arc_compression(memory)
             current_user_content = json.dumps(context, ensure_ascii=False, indent=2)
             system_prompt = build_chapter_system_prompt(target_words)
             messages = build_chapter_messages_with_history(system_prompt, current_user_content, memory)
@@ -1257,6 +1276,7 @@ class Handler(BaseHTTPRequestHandler):
             })
             with FILE_LOCK:
                 state = read_state()
+            drain_generation_memory(state)
             generation_mode = "multi_segment" if target_words > 4000 else "single_segment"
             draft = default_chapter_draft(chapter_no)
             draft["generation_mode"] = generation_mode
@@ -1270,7 +1290,6 @@ class Handler(BaseHTTPRequestHandler):
             draft["chapter_task_content"] = chapter_task_content
             if generation_mode == "single_segment":
                 memory = state["conversation_memory"]
-                memory = drain_arc_compression(memory)
                 current_user_content = json.dumps(context, ensure_ascii=False, indent=2)
                 system_prompt = build_chapter_system_prompt(target_words)
                 messages = build_chapter_messages_with_history(system_prompt, current_user_content, memory)

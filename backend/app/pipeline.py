@@ -336,15 +336,16 @@ def build_chapter_messages_with_history(
     return messages
 
 
-def generate_chapter_text(context: Dict[str, Any]) -> str:
+def generate_chapter_text(context: Dict[str, Any], memory: Optional[Dict[str, Any]] = None) -> str:
     length_target = context.get("current_user_directives", {}).get("length_target", 1800)
     system_prompt = build_chapter_system_prompt(length_target)
     user_prompt = json.dumps(context, ensure_ascii=False, indent=2)
+    messages = build_chapter_messages_with_history(system_prompt, user_prompt, memory) if memory else [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
     return deepseek_chat(
-        [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
+        messages,
         temperature=0.85,
     )
 
@@ -490,14 +491,18 @@ def update_storyline(storyline: Dict[str, Any], chapter_no: int, chapter_title: 
     history.sort(key=lambda item: int(item.get("chapter_no", 0)))
     storyline["chapter_summaries"] = history
     storyline["overall_summary"] = data.get("storyline_summary", storyline.get("overall_summary", ""))
-    storyline["open_threads"] = merge_list_unique(
-        list(storyline.get("open_threads", [])),
-        list(data.get("open_threads", [])),
-    )
     resolved = merge_list_unique(
         list(storyline.get("resolved_threads", [])),
         list(data.get("resolved_threads", [])),
     )
+    resolved_set = set(resolved)
+    storyline["open_threads"] = [
+        thread for thread in merge_list_unique(
+            list(storyline.get("open_threads", [])),
+            list(data.get("open_threads", [])),
+        )
+        if thread not in resolved_set
+    ]
     storyline["resolved_threads"] = resolved
     return storyline
 
@@ -1354,7 +1359,7 @@ def start_chapter_generation(
     chapter_task_content = json.dumps(context.get("chapter_task", {}), ensure_ascii=False, indent=2)
     draft["chapter_task_content"] = chapter_task_content
     if generation_mode == "single_segment":
-        raw_text = generate_chapter_text(context)
+        raw_text = generate_chapter_text(context, state.get("conversation_memory", default_conversation_memory()))
         revised_text, quality_reports, needs_user_review = run_chapter_quality_pipeline(raw_text, context)
         draft["chapter_text"] = revised_text
         draft["quality_reports"] = quality_reports
@@ -1673,4 +1678,3 @@ def safe_parse_int(value: Any, fallback: int) -> int:
         # Extract digits from the string representation
         digits = "".join(c for c in str(value) if c.isdigit())
         return int(digits) if digits else fallback
-

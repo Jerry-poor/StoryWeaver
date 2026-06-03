@@ -41,6 +41,7 @@ from backend.app.storage import *
 from backend.app.llm import *
 from backend.app.agents import *
 from backend.app.pipeline import *
+from backend.app.pipeline import _extract_plot_points, _merge_instruction, normalize_character_record, _resolve_field, _coerce_str_list
 from backend.app.handlers import *
 
 if __name__ == "__main__":

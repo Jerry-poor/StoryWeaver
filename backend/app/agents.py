@@ -232,11 +232,18 @@ def compact_chapter_turns(memory: dict) -> dict:
                   if t.get("turn_id") not in already_queued_chapters
                   and t.get("chapter_no") not in already_summarized]
 
-    # 按 ARC_SIZE 分批加入队列
-    for i in range(0, len(new_excess), ARC_SIZE):
-        batch = new_excess[i:i + ARC_SIZE]
-        if len(batch) == ARC_SIZE:  # 只有满批才压缩（不压缩尾部残余）
-            pending.append(batch)
+    pending_turns: List[Dict[str, Any]] = []
+    for batch in pending:
+        if isinstance(batch, list):
+            pending_turns.extend([t for t in batch if isinstance(t, dict)])
+    pending_turns.extend(new_excess)
+
+    rebuilt_pending = []
+    for i in range(0, len(pending_turns), ARC_SIZE):
+        batch = pending_turns[i:i + ARC_SIZE]
+        if batch:
+            rebuilt_pending.append(batch)
+    memory["pending_arc_compression"] = rebuilt_pending
 
     # 更新 recent_turns：保留非 confirmed chapter turns + 热窗口 chapter turns
     memory["recent_turns"] = sorted(
@@ -326,16 +333,18 @@ def drain_arc_compression(memory: dict) -> dict:
     arc_summaries = memory.setdefault("chapter_arc_summaries", [])
     existing_arc_nos = {a.get("arc_no") for a in arc_summaries}
 
-    processed = []
+    remaining_pending = []
     for batch in pending:
+        if not isinstance(batch, list) or len(batch) < ARC_SIZE:
+            remaining_pending.append(batch)
+            continue
         arc = generate_arc_summary(batch)
         arc_no = arc.get("arc_no")
         if arc_no not in existing_arc_nos:
             arc_summaries.append(arc)
             existing_arc_nos.add(arc_no)
-        processed.append(batch)
 
     # 排序
     memory["chapter_arc_summaries"] = sorted(arc_summaries, key=lambda a: a.get("arc_no", 0))
-    memory["pending_arc_compression"] = []
+    memory["pending_arc_compression"] = remaining_pending
     return memory

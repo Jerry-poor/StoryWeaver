@@ -458,5 +458,510 @@ class TestRelaxedJsonParsing(unittest.TestCase):
         self.assertEqual(result[0]["goal"], "侦探发现手稿并产生疑虑")
 
 
+class TestExtractPlotPoints(unittest.TestCase):
+    def test_empty_instruction(self):
+        result = sw._extract_plot_points("")
+        self.assertEqual(result, [])
+
+    def test_single_sentence(self):
+        result = sw._extract_plot_points("主角发现神秘手稿")
+        self.assertEqual(result, ["主角发现神秘手稿"])
+
+    def test_multiple_chinese_sentences(self):
+        result = sw._extract_plot_points("主角发现神秘手稿。他打开手稿阅读。手稿中预言了他的死亡")
+        self.assertEqual(len(result), 3)
+        self.assertIn("主角发现神秘手稿", result)
+        self.assertIn("他打开手稿阅读", result)
+        self.assertIn("手稿中预言了他的死亡", result)
+
+    def test_semicolon_separated(self):
+        result = sw._extract_plot_points("战斗场景要激烈；对话要有张力；结尾留悬念")
+        self.assertEqual(len(result), 3)
+
+    def test_filters_short_fragments(self):
+        result = sw._extract_plot_points("主角发现手稿。嗯。然后他去调查真相")
+        # "嗯" is too short (len <= 2), should be filtered
+        self.assertEqual(len(result), 2)
+
+
+class TestMergeInstruction(unittest.TestCase):
+    def test_empty_user_instruction(self):
+        result = sw._merge_instruction("", "AI生成的指引")
+        self.assertEqual(result, "AI生成的指引")
+
+    def test_empty_planned_instruction(self):
+        result = sw._merge_instruction("用户要求写战斗", "")
+        self.assertEqual(result, "用户要求写战斗")
+
+    def test_both_empty(self):
+        result = sw._merge_instruction("", "")
+        self.assertEqual(result, "")
+
+    def test_planned_is_subset_of_user(self):
+        result = sw._merge_instruction("以悬疑色彩为主，每章约1000字左右", "以悬疑色彩为主")
+        self.assertEqual(result, "以悬疑色彩为主，每章约1000字左右")
+
+    def test_merge_different_instructions(self):
+        result = sw._merge_instruction("用户原始指令", "AI补充指引")
+        self.assertIn("用户原始指令", result)
+        self.assertIn("AI补充指引", result)
+        self.assertIn("【用户要求（必须遵循）】", result)
+        self.assertIn("【补充指引】", result)
+
+    def test_user_instruction_always_preserved(self):
+        detailed = "主角在图书馆发现手稿；手稿预言了他的死亡；他决定调查真相"
+        planned = "聚焦发现过程"
+        result = sw._merge_instruction(detailed, planned)
+        self.assertIn(detailed, result)
+
+
+class TestBuildGenerationContextWithPlotPoints(unittest.TestCase):
+    def _make_state(self):
+        return {
+            "outline": sw.default_outline(),
+            "characters": sw.default_characters(),
+            "storyline": sw.default_storyline(),
+            "conversation_memory": sw.default_conversation_memory(),
+            "instruction_registry": sw.default_instruction_registry(),
+            "continuity": sw.default_continuity(),
+        }
+
+    def test_instruction_plot_points_present(self):
+        state = self._make_state()
+        ctx = sw.build_generation_context(
+            state, 1, "主角发现手稿。手稿预言了死亡。他决定调查", "", 1800,
+        )
+        points = ctx["current_user_directives"]["instruction_plot_points"]
+        self.assertIsInstance(points, list)
+        self.assertEqual(len(points), 3)
+
+    def test_empty_instruction_no_plot_points(self):
+        state = self._make_state()
+        ctx = sw.build_generation_context(state, 1, "", "", 1800)
+        points = ctx["current_user_directives"]["instruction_plot_points"]
+        self.assertEqual(points, [])
+
+
+class TestComplianceWithPlotPoints(unittest.TestCase):
+    @patch.object(sw, "deepseek_chat")
+    def test_missing_plot_point_detected(self, mock_chat):
+        mock_chat.return_value = json.dumps({
+            "compliant": False,
+            "violations": [
+                {
+                    "type": "plot_point_missing",
+                    "rule": "主角发现手稿",
+                    "evidence": "正文中未提及主角发现手稿",
+                    "severity": "hard",
+                }
+            ],
+        })
+        ctx = {
+            "current_user_directives": {
+                "extra_instruction": "主角发现手稿。手稿预言了死亡",
+                "instruction_plot_points": ["主角发现手稿", "手稿预言了死亡"],
+            },
+            "active_instruction_constraints": {
+                "global_constraints": [],
+                "chapter_constraints": [],
+                "banned_patterns": [],
+                "style_preferences": [],
+            },
+        }
+        result = sw.check_instruction_compliance("一些没有手稿的文本", ctx)
+        self.assertFalse(result["compliant"])
+        plot_violations = [v for v in result["violations"] if v.get("type") == "plot_point_missing"]
+        self.assertTrue(len(plot_violations) > 0)
+        self.assertEqual(plot_violations[0]["severity"], "hard")
+
+
+class TestCoerceStrList(unittest.TestCase):
+    def test_list_input(self):
+        self.assertEqual(sw._coerce_str_list(["a", "b"]), ["a", "b"])
+
+    def test_string_single(self):
+        self.assertEqual(sw._coerce_str_list("冷静沉着"), ["冷静沉着"])
+
+    def test_string_with_chinese_comma(self):
+        result = sw._coerce_str_list("冷静，沉着，果断")
+        self.assertEqual(len(result), 3)
+        self.assertIn("冷静", result)
+
+    def test_string_with_chinese_enumeration_comma(self):
+        result = sw._coerce_str_list("冷静、沉着、果断")
+        self.assertEqual(len(result), 3)
+
+    def test_empty_input(self):
+        self.assertEqual(sw._coerce_str_list(""), [])
+        self.assertEqual(sw._coerce_str_list(None), [])
+        self.assertEqual(sw._coerce_str_list([]), [])
+
+    def test_filters_empty_elements(self):
+        self.assertEqual(sw._coerce_str_list(["a", "", "  ", "b"]), ["a", "b"])
+
+
+class TestResolveField(unittest.TestCase):
+    def test_primary_key(self):
+        self.assertEqual(sw._resolve_field({"name": "李明"}, "name", ("alias",)), "李明")
+
+    def test_alias_key(self):
+        self.assertEqual(sw._resolve_field({"角色名": "李明"}, "name", ("角色名",)), "李明")
+
+    def test_default_fallback(self):
+        self.assertEqual(sw._resolve_field({}, "name", ("alias",), "默认"), "默认")
+
+    def test_skips_empty_primary(self):
+        self.assertEqual(sw._resolve_field({"name": "", "alias": "李明"}, "name", ("alias",)), "李明")
+
+    def test_skips_empty_list_primary(self):
+        self.assertEqual(sw._resolve_field({"personality": [], "性格": ["冷静"]}, "personality", ("性格",)), ["冷静"])
+
+
+class TestNormalizeCharacterRecord(unittest.TestCase):
+    def test_standard_fields(self):
+        item = {
+            "name": "李明",
+            "role": "主角",
+            "appearance": "高大英俊",
+            "personality": ["冷静", "果断"],
+            "motivation": "寻找真相",
+        }
+        result = sw.normalize_character_record(item, 1)
+        self.assertEqual(result["name"], "李明")
+        self.assertEqual(result["role"], "主角")
+        self.assertEqual(result["appearance"], "高大英俊")
+        self.assertEqual(result["personality"], ["冷静", "果断"])
+        self.assertEqual(result["motivation"], "寻找真相")
+        self.assertIn("current_state", result)
+        self.assertIn("constraints", result)
+
+    def test_chinese_field_names(self):
+        item = {
+            "姓名": "王芳",
+            "身份": "配角",
+            "外貌": "清秀",
+            "性格": "温柔善良",
+            "动机": "保护家人",
+        }
+        result = sw.normalize_character_record(item, 2)
+        self.assertEqual(result["name"], "王芳")
+        self.assertEqual(result["role"], "配角")
+        self.assertEqual(result["appearance"], "清秀")
+        self.assertEqual(result["personality"], ["温柔善良"])
+        self.assertEqual(result["motivation"], "保护家人")
+
+    def test_personality_as_string(self):
+        item = {"name": "test", "personality": "冷静沉着"}
+        result = sw.normalize_character_record(item, 1)
+        self.assertEqual(result["personality"], ["冷静沉着"])
+
+    def test_personality_as_comma_separated(self):
+        item = {"name": "test", "性格": "冷静，沉着，果断"}
+        result = sw.normalize_character_record(item, 1)
+        self.assertEqual(len(result["personality"]), 3)
+
+    def test_missing_fields_get_defaults(self):
+        item = {"name": "李明"}
+        result = sw.normalize_character_record(item, 1)
+        self.assertEqual(result["appearance"], "")
+        self.assertEqual(result["personality"], [])
+        self.assertEqual(result["motivation"], "")
+        self.assertEqual(result["constraints"], [])
+        self.assertIsInstance(result["current_state"], dict)
+        self.assertIn("location", result["current_state"])
+
+    def test_non_dict_item(self):
+        result = sw.normalize_character_record("李明", 1)
+        self.assertEqual(result["name"], "李明")
+        self.assertEqual(result["role"], "主角")
+
+    def test_current_state_with_chinese_keys(self):
+        item = {
+            "name": "test",
+            "当前状态": {"位置": "密室", "情绪": "紧张"},
+        }
+        result = sw.normalize_character_record(item, 1)
+        self.assertEqual(result["current_state"]["location"], "密室")
+        self.assertEqual(result["current_state"]["mood"], "紧张")
+
+
+class TestBuildCharactersFromOutlineNormalization(unittest.TestCase):
+    def test_variant_schema_characters(self):
+        outline = sw.default_outline()
+        outline["character_seed"] = [
+            {"name": "李明", "role": "主角", "性格": "冷静", "外貌": "高大"},
+            {"角色名": "王芳", "身份": "配角", "personality": ["温柔", "善良"]},
+        ]
+        result = sw.build_characters_from_outline(outline)
+        chars = result["characters"]
+        self.assertEqual(len(chars), 2)
+        self.assertEqual(chars[0]["name"], "李明")
+        self.assertEqual(chars[0]["personality"], ["冷静"])
+        self.assertEqual(chars[0]["appearance"], "高大")
+        self.assertEqual(chars[1]["name"], "王芳")
+        self.assertEqual(chars[1]["personality"], ["温柔", "善良"])
+
+    def test_string_only_seeds(self):
+        outline = sw.default_outline()
+        outline["character_seed"] = ["李明", "王芳"]
+        result = sw.build_characters_from_outline(outline)
+        chars = result["characters"]
+        self.assertEqual(len(chars), 2)
+        self.assertEqual(chars[0]["name"], "李明")
+        self.assertEqual(chars[0]["id"], "c001")
+        self.assertEqual(chars[1]["name"], "王芳")
+        self.assertEqual(chars[1]["id"], "c002")
+
+
+class TestMergeCharacterUpdatesNormalization(unittest.TestCase):
+    def test_new_character_gets_normalized(self):
+        characters = {"characters": [
+            {"id": "c001", "name": "李明", "role": "主角", "appearance": "", "personality": [], "motivation": "", "constraints": [], "current_state": sw.default_character_state()},
+        ]}
+        new_chars = [
+            {"id": "c999", "name": "神秘人", "role": "反派"},
+        ]
+        result = sw.merge_character_updates(characters, [], new_chars)
+        added = [c for c in result["characters"] if c["id"] == "c999"]
+        self.assertEqual(len(added), 1)
+        self.assertEqual(added[0]["name"], "神秘人")
+        self.assertIn("personality", added[0])
+        self.assertIn("appearance", added[0])
+        self.assertIn("motivation", added[0])
+        self.assertIn("constraints", added[0])
+        self.assertIn("current_state", added[0])
+        self.assertIn("location", added[0]["current_state"])
+
+
+class TestStorylineThreadResolution(unittest.TestCase):
+    def test_resolved_threads_removed_from_open_threads(self):
+        storyline = {
+            **sw.default_storyline(),
+            "open_threads": ["谁在门外", "手稿来源"],
+            "resolved_threads": [],
+        }
+        result = sw.update_storyline(
+            storyline,
+            2,
+            "第2章",
+            {
+                "chapter_summary": [],
+                "new_events": [],
+                "open_threads": ["新的疑问"],
+                "resolved_threads": ["谁在门外"],
+                "storyline_summary": "继续推进",
+            },
+        )
+        self.assertNotIn("谁在门外", result["open_threads"])
+        self.assertIn("手稿来源", result["open_threads"])
+        self.assertIn("新的疑问", result["open_threads"])
+        self.assertIn("谁在门外", result["resolved_threads"])
+
+
+class TestChapterHistoryInjection(unittest.TestCase):
+    @patch.object(sw, "deepseek_chat")
+    def test_generate_chapter_text_uses_confirmed_history_when_memory_provided(self, mock_chat):
+        mock_chat.return_value = "新章节"
+        memory = sw.default_conversation_memory()
+        memory["recent_turns"] = [
+            {
+                "type": "chapter",
+                "confirmed": True,
+                "user_prompt_text": "上一章任务",
+                "assistant_text": "上一章正文",
+            }
+        ]
+        context = {
+            "current_user_directives": {"length_target": 1800},
+            "chapter_task": {"chapter_no": 2},
+        }
+        sw.generate_chapter_text(context, memory)
+        messages = mock_chat.call_args[0][0]
+        self.assertEqual(messages[1]["content"], "上一章任务")
+        self.assertEqual(messages[2]["content"], "上一章正文")
+        self.assertIn('"chapter_no": 2', messages[-1]["content"])
+
+
+class TestArcCompressionQueue(unittest.TestCase):
+    def _turn(self, no):
+        return {
+            "turn_id": no,
+            "type": "chapter",
+            "chapter_no": no,
+            "confirmed": True,
+            "assistant": f"第{no}章",
+        }
+
+    def test_compact_chapter_turns_keeps_partial_pending_batch(self):
+        count = sw.KV_WINDOW + min(2, max(1, sw.ARC_SIZE - 1))
+        memory = sw.default_conversation_memory()
+        memory["recent_turns"] = [self._turn(no) for no in range(1, count + 1)]
+        result = sw.compact_chapter_turns(memory)
+        pending = result.get("pending_arc_compression", [])
+        self.assertTrue(pending)
+        self.assertEqual(len(pending[0]), count - sw.KV_WINDOW)
+        self.assertEqual([t["chapter_no"] for t in pending[0]], list(range(1, count - sw.KV_WINDOW + 1)))
+
+    @patch.object(sw, "generate_arc_summary")
+    def test_drain_arc_compression_keeps_partial_and_processes_full_batches(self, mock_summary):
+        mock_summary.return_value = {
+            "arc_no": 1,
+            "chapter_range": [1, sw.ARC_SIZE],
+            "key_events": [],
+            "character_state_snapshot": {},
+            "open_threads_inherited": [],
+            "arc_summary_text": "摘要",
+        }
+        partial = [self._turn(99)]
+        full = [self._turn(no) for no in range(1, sw.ARC_SIZE + 1)]
+        memory = sw.default_conversation_memory()
+        memory["pending_arc_compression"] = [partial, full]
+        result = sw.drain_arc_compression(memory)
+        self.assertEqual(result["pending_arc_compression"], [partial])
+        self.assertEqual(len(result["chapter_arc_summaries"]), 1)
+        mock_summary.assert_called_once_with(full)
+
+    @patch.object(sw, "save_json")
+    @patch.object(sw, "generate_arc_summary")
+    def test_drain_generation_memory_updates_state_before_context_build(self, mock_summary, mock_save):
+        mock_summary.return_value = {
+            "arc_no": 1,
+            "chapter_range": [1, sw.ARC_SIZE],
+            "key_events": ["关键事件"],
+            "character_state_snapshot": {},
+            "open_threads_inherited": [],
+            "arc_summary_text": "已压缩弧线",
+        }
+        state = {
+            "conversation_memory": {
+                **sw.default_conversation_memory(),
+                "pending_arc_compression": [[self._turn(no) for no in range(1, sw.ARC_SIZE + 1)]],
+            }
+        }
+        sw.drain_generation_memory(state)
+        self.assertEqual(state["conversation_memory"]["chapter_arc_summaries"][0]["arc_summary_text"], "已压缩弧线")
+        mock_save.assert_called_with(sw.CONVERSATION_PATH, state["conversation_memory"])
+
+
+class TestChapterGenerationHandlers(unittest.TestCase):
+    def _state(self):
+        outline = sw.default_outline()
+        outline["status"] = "confirmed"
+        return {
+            "outline": outline,
+            "characters": sw.default_characters(),
+            "storyline": sw.default_storyline(),
+            "conversation_memory": sw.default_conversation_memory(),
+            "instruction_registry": sw.default_instruction_registry(),
+            "continuity": sw.default_continuity(),
+        }
+
+    def _updates(self):
+        return {
+            "chapter_title": "抽取标题",
+            "chapter_summary": ["摘要"],
+            "new_events": ["事件"],
+            "open_threads": ["线索"],
+            "resolved_threads": [],
+            "character_updates": [],
+            "new_characters": [],
+            "storyline_summary": "故事摘要",
+            "ending_state": sw.default_ending_state(),
+            "thread_priority": {"immediate_threads": [], "chapter_threads": [], "long_arc_threads": []},
+        }
+
+    def _load_json_side_effect(self, state):
+        def side_effect(path, default):
+            if path == sw.OUTLINE_PATH:
+                return state["outline"]
+            if path == sw.CONVERSATION_PATH:
+                return sw.default_conversation_memory()
+            return default
+        return side_effect
+
+    @patch.object(sw, "create_snapshot")
+    @patch.object(sw, "save_json")
+    @patch.object(sw, "extract_chapter_updates")
+    @patch.object(sw, "run_chapter_quality_pipeline")
+    @patch.object(sw, "deepseek_chat")
+    @patch.object(sw, "load_json")
+    @patch.object(sw, "read_state")
+    def test_generate_chapter_non_stream_saves_extracted_title(
+        self, mock_read_state, mock_load_json, mock_chat, mock_quality,
+        mock_extract, mock_save, mock_snapshot,
+    ):
+        state = self._state()
+        mock_read_state.return_value = state
+        mock_load_json.side_effect = self._load_json_side_effect(state)
+        mock_chat.return_value = "原始正文"
+        mock_quality.return_value = ("修订正文", [], False)
+        mock_extract.return_value = self._updates()
+        handler = object.__new__(sw.Handler)
+        handler._send_json = MagicMock()
+
+        handler.handle_generate_chapter({"chapter_no": 1, "length_target": 1800})
+
+        payload = handler._send_json.call_args[0][1]
+        self.assertEqual(payload["title"], "抽取标题")
+        chapter_saves = [call for call in mock_save.call_args_list if call.args[0] == sw.now_chapter_path(1)]
+        self.assertEqual(chapter_saves[-1].args[1]["title"], "抽取标题")
+
+    @patch.object(sw, "create_snapshot")
+    @patch.object(sw, "save_json")
+    @patch.object(sw, "extract_chapter_updates")
+    @patch.object(sw, "run_chapter_quality_pipeline")
+    @patch.object(sw, "deepseek_chat_stream")
+    @patch.object(sw, "load_json")
+    @patch.object(sw, "read_state")
+    def test_generate_chapter_stream_updates_story_state_and_final_payload(
+        self, mock_read_state, mock_load_json, mock_stream, mock_quality,
+        mock_extract, mock_save, mock_snapshot,
+    ):
+        state = self._state()
+        mock_read_state.return_value = state
+        mock_load_json.side_effect = self._load_json_side_effect(state)
+        mock_stream.return_value = iter(["原始", "正文"])
+        mock_quality.return_value = ("修订正文", [], False)
+        updates = self._updates()
+        mock_extract.return_value = updates
+        handler = object.__new__(sw.Handler)
+        handler._send_sse_headers = MagicMock()
+        handler._send_sse_event = MagicMock()
+
+        handler.handle_generate_chapter_stream({"chapter_no": 1, "length_target": 1800})
+
+        saved_paths = [call.args[0] for call in mock_save.call_args_list]
+        self.assertIn(sw.CHARACTERS_PATH, saved_paths)
+        self.assertIn(sw.STORYLINE_PATH, saved_paths)
+        final_events = [
+            call.args[1] for call in handler._send_sse_event.call_args_list
+            if call.args[0] == "final"
+        ]
+        self.assertEqual(final_events[-1]["updates"], updates)
+        self.assertEqual(final_events[-1]["title"], "抽取标题")
+
+    @patch.object(sw, "save_json")
+    @patch.object(sw, "run_chapter_quality_pipeline")
+    @patch.object(sw, "deepseek_chat_stream")
+    @patch.object(sw, "read_state")
+    def test_start_chapter_stream_persists_chapter_task_content(
+        self, mock_read_state, mock_stream, mock_quality, mock_save,
+    ):
+        state = self._state()
+        mock_read_state.return_value = state
+        mock_stream.return_value = iter(["正文"])
+        mock_quality.return_value = ("正文", [], False)
+        handler = object.__new__(sw.Handler)
+        handler._send_sse_headers = MagicMock()
+        handler._send_sse_event = MagicMock()
+
+        handler.handle_start_chapter_stream({"chapter_no": 2, "length_target": 1800})
+
+        chapter_saves = [call for call in mock_save.call_args_list if call.args[0] == sw.now_chapter_path(2)]
+        self.assertTrue(chapter_saves)
+        saved_draft = chapter_saves[-1].args[1]
+        self.assertIn('"chapter_no": 2', saved_draft["chapter_task_content"])
+
+
 if __name__ == "__main__":
     unittest.main()
