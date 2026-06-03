@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 # Modular imports
 from backend.app.config import (
@@ -19,6 +19,7 @@ from backend.app.config import (
     DEFAULT_SEGMENT_TARGET_WORDS,
     DEFAULT_MAX_SEGMENT_TOKENS,
     DEFAULT_MAX_SEGMENTS,
+    KV_WINDOW,
 )
 from backend.app.storage import (
     default_outline,
@@ -48,6 +49,98 @@ from backend.app.llm import deepseek_chat, deepseek_chat_stream, parse_json_rela
 from backend.app.agents import merge_list_unique
 
 
+def _resolve_field(item: Dict[str, Any], primary: str, aliases: Tuple[str, ...], default: Any = "") -> Any:
+    """Resolve a field value from an item dict, trying primary key then aliases."""
+    val = item.get(primary)
+    if val is not None and val != "" and val != []:
+        return val
+    for alias in aliases:
+        val = item.get(alias)
+        if val is not None and val != "" and val != []:
+            return val
+    return default
+
+
+def _coerce_str_list(value: Any) -> List[str]:
+    """Coerce a value to a list of non-empty strings.
+    
+    Handles: list, comma/Chinese-comma-separated string, single string.
+    """
+    if isinstance(value, list):
+        return [str(v).strip() for v in value if str(v).strip()]
+    if isinstance(value, str) and value.strip():
+        # Split on common delimiters: Chinese comma, comma, semicolon
+        parts = re.split(r'[,，、；;]+', value)
+        result = [p.strip() for p in parts if p.strip()]
+        return result if len(result) > 1 else [value.strip()]
+    return []
+
+
+def normalize_character_record(item: Dict[str, Any], index: int) -> Dict[str, Any]:
+    """Normalize a raw character dict into the canonical character schema.
+    
+    Handles common field name aliases (Chinese and English) and coerces
+    types so that personality/constraints are always lists, appearance/motivation
+    are always strings, and current_state always has the full set of keys.
+    """
+    if not isinstance(item, dict):
+        name = str(item).strip() or f"角色{index}"
+        return {
+            "id": f"c{index:03d}",
+            "name": name,
+            "role": "主角" if index == 1 else "重要角色",
+            "appearance": "",
+            "personality": [],
+            "motivation": "",
+            "constraints": [],
+            "current_state": default_character_state(),
+        }
+
+    name = str(
+        _resolve_field(item, "name", ("character", "alias", "角色名", "姓名", "称呼"), f"角色{index}")
+    ).strip()
+    role = str(
+        _resolve_field(item, "role", ("角色", "身份", "定位", "type"), "主角" if index == 1 else "重要角色")
+    ).strip()
+    appearance = str(
+        _resolve_field(item, "appearance", ("外貌", "looks", "外貌描述", "描述", "description", "外观"), "")
+    ).strip()
+    personality = _coerce_str_list(
+        _resolve_field(item, "personality", ("性格", "traits", "trait", "性格特点", "特点", "character_traits"), [])
+    )
+    motivation = str(
+        _resolve_field(item, "motivation", ("动机", "goal", "objective", "目标", "目的"), "")
+    ).strip()
+    constraints = _coerce_str_list(
+        _resolve_field(item, "constraints", ("约束", "限制", "规则", "rules"), [])
+    )
+
+    raw_state = _resolve_field(item, "current_state", ("state", "状态", "当前状态"), {})
+    if not isinstance(raw_state, dict):
+        raw_state = {}
+    current_state = {
+        "location": str(raw_state.get("location", raw_state.get("位置", ""))).strip(),
+        "mood": str(raw_state.get("mood", raw_state.get("情绪", raw_state.get("心情", "")))).strip(),
+        "injury": str(raw_state.get("injury", raw_state.get("伤势", ""))).strip(),
+        "known_information": _coerce_str_list(raw_state.get("known_information", raw_state.get("已知信息", []))),
+        "unknown_information": _coerce_str_list(raw_state.get("unknown_information", raw_state.get("未知信息", []))),
+    }
+
+    # Preserve the original id if present
+    char_id = str(item.get("id", f"c{index:03d}")).strip()
+
+    return {
+        "id": char_id,
+        "name": name,
+        "role": role,
+        "appearance": appearance,
+        "personality": personality,
+        "motivation": motivation,
+        "constraints": constraints,
+        "current_state": current_state,
+    }
+
+
 def build_characters_from_outline(outline: Dict[str, Any]) -> Dict[str, Any]:
     seed_items = safe_list(outline.get("character_seed"))
     if not seed_items:
@@ -55,42 +148,10 @@ def build_characters_from_outline(outline: Dict[str, Any]) -> Dict[str, Any]:
 
     characters: List[Dict[str, Any]] = []
     for index, item in enumerate(seed_items, start=1):
-        if isinstance(item, dict):
-            name = str(item.get("name") or item.get("character") or item.get("alias") or f"角色{index}").strip()
-            role = str(item.get("role") or ("主角" if index == 1 else "重要角色")).strip()
-            appearance = str(item.get("appearance") or "").strip()
-            personality = [str(v).strip() for v in safe_list(item.get("personality")) if str(v).strip()]
-            motivation = str(item.get("motivation") or "").strip()
-            constraints = [str(v).strip() for v in safe_list(item.get("constraints")) if str(v).strip()]
-            current_state = safe_dict(item.get("current_state"), default_character_state())
-            current_state = {
-                "location": str(current_state.get("location", "")).strip(),
-                "mood": str(current_state.get("mood", "")).strip(),
-                "injury": str(current_state.get("injury", "")).strip(),
-                "known_information": [str(v).strip() for v in safe_list(current_state.get("known_information")) if str(v).strip()],
-                "unknown_information": [str(v).strip() for v in safe_list(current_state.get("unknown_information")) if str(v).strip()],
-            }
-        else:
-            name = str(item).strip() or f"角色{index}"
-            role = "主角" if index == 1 else "重要角色"
-            appearance = ""
-            personality = []
-            motivation = ""
-            constraints = []
-            current_state = default_character_state()
-
-        characters.append(
-            {
-                "id": f"c{index:03d}",
-                "name": name,
-                "role": role,
-                "appearance": appearance,
-                "personality": personality,
-                "motivation": motivation,
-                "constraints": constraints,
-                "current_state": current_state,
-            }
-        )
+        record = normalize_character_record(item, index)
+        # Always assign sequential id for seed characters
+        record["id"] = f"c{index:03d}"
+        characters.append(record)
 
     return {"characters": characters}
 
@@ -176,6 +237,20 @@ def select_chapter_plan(outline: Dict[str, Any], chapter_no: int) -> Dict[str, A
     }
 
 
+def _extract_plot_points(instruction: str) -> List[str]:
+    """Extract distinct plot points from user instruction for explicit tracking.
+
+    Splits Chinese text at common delimiters (sentence-ending punctuation,
+    semicolons, numbered items) so each atomic requirement is listed separately.
+    This makes it harder for the LLM to silently skip any requirement.
+    """
+    if not instruction:
+        return []
+    parts = re.split(r'[。；;！!？?\n]+', instruction)
+    points = [p.strip() for p in parts if p.strip() and len(p.strip()) > 2]
+    return points if points else [instruction.strip()]
+
+
 def build_generation_context(state: Dict[str, Any], chapter_no: int, instruction: str, tone: str, length_target: int) -> Dict[str, Any]:
     outline = state["outline"]
     characters = state["characters"]
@@ -185,6 +260,7 @@ def build_generation_context(state: Dict[str, Any], chapter_no: int, instruction
     continuity = state.get("continuity") or load_continuity()
     chapter_plan = select_chapter_plan(outline, chapter_no)
     recent_non_chapter = [t for t in memory.get("recent_turns", []) if t.get("type") != "chapter"]
+    arc_summaries = memory.get("chapter_arc_summaries", [])
     confirmed_story_facts = []
     for cs in safe_list(storyline.get("chapter_summaries", [])):
         if isinstance(cs, dict):
@@ -193,12 +269,14 @@ def build_generation_context(state: Dict[str, Any], chapter_no: int, instruction
     return {
         "current_user_directives": {
             "extra_instruction": instruction,
+            "instruction_plot_points": _extract_plot_points(instruction),
             "tone": tone or safe_dict(outline.get("writing_rules"), default_outline()["writing_rules"]).get("tone", ""),
             "length_target": length_target or safe_dict(outline.get("writing_rules"), default_outline()["writing_rules"]).get("chapter_length_target", 1800),
         },
         "active_instruction_constraints": registry,
         "continuity_contract": continuity.get("continuity_contract", default_continuity_contract()),
         "previous_ending_state": continuity.get("ending_state", default_ending_state()),
+        "thread_priority": continuity.get("thread_priority", {"immediate_threads": [], "chapter_threads": [], "long_arc_threads": []}),
         "confirmed_story_facts": confirmed_story_facts,
         "chapter_task": {
             "chapter_no": chapter_no,
@@ -207,10 +285,15 @@ def build_generation_context(state: Dict[str, Any], chapter_no: int, instruction
         "characters": characters,
         "outline": outline,
         "storyline_summary": storyline,
+        "chapter_arc_summaries": arc_summaries,
         "dialogue_summary": memory.get("dialogue_summary", {}),
         "recent_turns": recent_non_chapter[-MAX_RECENT_TURNS:],
         "writing_optimization_goals": {
             "advance_open_threads": True,
+            "resolve_immediate_threads": True,
+            "limit_new_threads": True,
+            "narrative_continuity_with_previous_chapter": True,
+            "avoid_forced_suspense": True,
             "auto_fill_missing_backstory": True,
             "maintain_pov_consistency": True,
         },
@@ -222,6 +305,8 @@ def build_generation_context(state: Dict[str, Any], chapter_no: int, instruction
             "characters",
             "outline",
             "storyline_summary",
+            "thread_priority",
+            "chapter_arc_summaries",
             "dialogue_summary",
             "recent_turns",
             "chapter_task",
@@ -235,15 +320,15 @@ def build_chapter_messages_with_history(
     current_user_content: str,
     memory: Dict[str, Any],
 ) -> List[Dict[str, str]]:
-    """Build messages replaying CONFIRMED chapter turns."""
+    """Build messages replaying at most KV_WINDOW most recent CONFIRMED chapter turns."""
     messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
     chapter_turns = [
         t for t in memory.get("recent_turns", [])
         if t.get("type") == "chapter" and t.get("confirmed", False)
     ]
-    for turn in chapter_turns:
-        task_text = turn.get("user_prompt_text")   # just chapter_task JSON
-        assistant_text = turn.get("assistant_text") # full chapter prose
+    for turn in chapter_turns[-KV_WINDOW:]:
+        task_text = turn.get("user_prompt_text")
+        assistant_text = turn.get("assistant_text")
         if task_text and assistant_text:
             messages.append({"role": "user", "content": task_text})
             messages.append({"role": "assistant", "content": assistant_text})
@@ -286,8 +371,10 @@ def extract_chapter_updates(state: Dict[str, Any], chapter_no: int, chapter_text
                     "id": "c999",
                     "name": "",
                     "role": "",
-                    "appearance": "",
-                    "motivation": "",
+                    "appearance": "外貌描述",
+                    "personality": ["性格特点"],
+                    "motivation": "角色动机",
+                    "constraints": [],
                     "current_state": {}
                 }
             ],
@@ -302,6 +389,7 @@ def extract_chapter_updates(state: Dict[str, Any], chapter_no: int, chapter_text
                 "immediate_unresolved_question": "",
                 "scene_continues": False,
                 "recommended_next_opening": "",
+                "next_chapter_driver": "",
             },
             "thread_priority": {
                 "immediate_threads": [],
@@ -322,7 +410,9 @@ def extract_chapter_updates(state: Dict[str, Any], chapter_no: int, chapter_text
             "如果本章出现了已有角色表中没有的新重要角色，请在 new_characters 中补充",
             "如果没有变化或没有新角色，返回空数组或空对象",
             "ending_state 必须准确反映本章结尾的场景状态",
-            "scene_continues 为 true 表示本章结尾场景尚未结束（如悬念、动作进行中），下一章应从该场景接续",
+            "scene_continues 仅在本章结尾场景在物理时空上字面尚未结束（动作进行中、对话未完）时为 true；不要为了制造悬念而设为 true",
+            "next_chapter_driver 必须填写：用一句话描述本章结尾留下的、应当推动下一章开场的具体后果/决定/行动/动机（例如'主角决定连夜赶往码头核实账本'）。即使下一章场景切换，开场也应承接这个驱动力，而不是用'天黑了/第二天'之类通用时间过场",
+            "immediate_unresolved_question 只记录剧情自然产生的待解问题，不要为了悬疑刻意制造神秘钩子",
             "thread_priority 将 open_threads 按紧迫程度分为三类：immediate_threads（必须下一章处理）、chapter_threads（近几章内处理）、long_arc_threads（长线伏笔）",
         ],
     }
@@ -360,17 +450,23 @@ def merge_character_updates(characters: Dict[str, Any], updates: List[Dict[str, 
     index = {item.get("id"): item for item in items}
     
     if new_chars:
+        next_index = len(items) + 1
         for char in new_chars:
             if isinstance(char, dict) and char.get("id") and char.get("id") not in index:
-                items.append(char)
-                index[char["id"]] = char
+                # Normalize new character to ensure all fields are present
+                normalized = normalize_character_record(char, next_index)
+                # Preserve the original id from extraction
+                normalized["id"] = char["id"]
+                items.append(normalized)
+                index[normalized["id"]] = normalized
+                next_index += 1
 
     for update in updates:
         char_id = update.get("id")
         if char_id not in index:
             continue
         target = index[char_id]
-        current_state = target.setdefault("current_state", {})
+        current_state = target.setdefault("current_state", default_character_state())
         changes = update.get("current_state_changes", {})
         if isinstance(changes, dict):
             for key, value in changes.items():
@@ -419,15 +515,17 @@ def check_instruction_compliance(chapter_text: str, context: Dict[str, Any]) -> 
     user_directives = context.get("current_user_directives", {})
     registry = context.get("active_instruction_constraints", {})
     extra_instruction = str(user_directives.get("extra_instruction", "")).strip()
+    instruction_plot_points = user_directives.get("instruction_plot_points", [])
     global_constraints = registry.get("global_constraints", [])
     chapter_constraints = registry.get("chapter_constraints", [])
     banned_patterns = registry.get("banned_patterns", [])
     if not extra_instruction and not global_constraints and not chapter_constraints and not banned_patterns:
         return {"compliant": True, "violations": []}
     prompt = {
-        "task": "检查小说章节正文是否违反用户指令和长期约束。",
+        "task": "检查小说章节正文是否违反用户指令和长期约束，并检查用户要求的情节要点是否在正文中得到体现。",
         "chapter_text": chapter_text,
         "current_user_directives": user_directives,
+        "instruction_plot_points": instruction_plot_points,
         "global_constraints": global_constraints,
         "chapter_constraints": chapter_constraints,
         "banned_patterns": banned_patterns,
@@ -435,15 +533,17 @@ def check_instruction_compliance(chapter_text: str, context: Dict[str, Any]) -> 
             "compliant": True,
             "violations": [
                 {
-                    "type": "user_directive | global_constraint | chapter_constraint | banned_pattern",
-                    "rule": "被违反的具体规则",
-                    "evidence": "章节中违反该规则的原文片段",
+                    "type": "user_directive | plot_point_missing | global_constraint | chapter_constraint | banned_pattern",
+                    "rule": "被违反的具体规则或遗漏的情节要点",
+                    "evidence": "章节中违反该规则的原文片段，或说明哪个情节要点未体现",
                     "severity": "hard | soft",
                 }
             ],
         },
         "requirements": [
             "仔细检查章节正文是否违反了任何用户硬指令或长期约束",
+            "如果 instruction_plot_points 非空，逐一检查每个情节要点是否在正文中得到了合理体现",
+            "如果某个情节要点在正文中被完全省略或严重简化（仅一笔带过而非展开描写），这是 type=plot_point_missing、severity=hard 的违反",
             "如果用户指令说'不要写战斗'，章节中出现任何战斗描写都是 hard violation",
             "如果 banned_patterns 包含'男主冷笑'，章节中出现该模式就是 hard violation",
             "severity=hard 表示必须修订，soft 表示建议修订",
@@ -471,14 +571,37 @@ TIME_JUMP_PATTERNS = re.compile(
     r"(三日后|数日后|翌日|第二天|几天后|与此同时|转眼|数周后|数月后|半年后|一年后|多年后|次日|隔天|过了?几天|过了?数日|数天之后|几周之后|几月之后)",
 )
 
+# 通用时间过场 / 环境定场开场，用于检测章节间生硬切割（即使 scene_continues=false 也应避免）。
+GENERIC_OPENER_PATTERNS = re.compile(
+    r"^[\s　]*(天黑了|天亮了|夜幕降临|夜色降临|夜深了|入夜|清晨的阳光|清晨时分|晨光|朝阳|第二天|翌日|次日|几天后|数日后|三日后|转眼|与此同时|时间一晃|时光荏苒|不知过了多久|许久之后|许久以后)",
+)
+
 
 def check_chapter_continuity(chapter_text: str, context: Dict[str, Any]) -> Dict[str, Any]:
     contract = context.get("continuity_contract", default_continuity_contract())
     ending_state = context.get("previous_ending_state", default_ending_state())
-    if not contract.get("must_start_from_previous_ending") and not contract.get("must_not_jump_time") and not contract.get("must_not_change_location_immediately"):
-        return {"continuous": True, "violations": [], "revision_instruction": ""}
+    narrative_req = str(contract.get("narrative_continuity_requirement", "")).strip()
     opening_words = min(300, len(chapter_text))
     opening_text = chapter_text[:opening_words]
+    if not contract.get("must_start_from_previous_ending") and not contract.get("must_not_jump_time") and not contract.get("must_not_change_location_immediately"):
+        # 场景未要求严格接续，但仍需叙事/因果连贯：检测生硬的通用过场开场。
+        m = GENERIC_OPENER_PATTERNS.search(opening_text)
+        if narrative_req and m:
+            return {
+                "continuous": False,
+                "violations": [{
+                    "type": "scene_break",
+                    "description": "章节以通用时间过场/环境定场开场，未承接上一章的因果驱动力",
+                    "evidence": m.group(0),
+                    "severity": "hard",
+                }],
+                "revision_instruction": (
+                    "删除开头的通用时间过场/环境定场句，改为直接承接上一章结尾的因果驱动力："
+                    + narrative_req
+                    + "。让本章从这个后果/决定/动机出发的具体行动或处境进入，不要用'天黑了/第二天'之类的句子切割。"
+                ),
+            }
+        return {"continuous": True, "violations": [], "revision_instruction": ""}
     prompt = {
         "task": "检查新章节开头是否满足章节接续契约。",
         "opening_text": opening_text,
@@ -622,7 +745,8 @@ def build_chapter_system_prompt(length_target: int) -> str:
     return (
         "你是一个小说章节写作 agent。\n"
         "【约束优先级】（从高到低，前者绝对高于后者，冲突时必须服从高优先级）：\n"
-        "1. current_user_directives — 当前用户硬指令（extra_instruction、tone、length_target）\n"
+        "1. current_user_directives — 当前用户硬指令（extra_instruction、instruction_plot_points、tone、length_target）\n"
+        "   → 用户指令中描述的具体情节、场景和角色行为必须在正文中完整体现，不得省略\n"
         "2. active_instruction_constraints — 长期约束注册表（global_constraints、chapter_constraints、banned_patterns、style_preferences）\n"
         "3. continuity_contract — 章节接续契约（必须从上一章结尾接起、不得跳时间/换地点等）\n"
         "4. confirmed_story_facts — 已确认的故事事实（之前章节已发生的事件）\n"
@@ -632,10 +756,26 @@ def build_chapter_system_prompt(length_target: int) -> str:
         "8. writing_optimization_goals — 写作优化目标（推进 open_threads、自动补齐前置逻辑等）\n\n"
         "【关键规则】：\n"
         "- 用户硬指令和长期约束绝对优先于大纲。如果用户说'不要写战斗'，即使大纲有战斗目标也不得写战斗。\n"
+        "- 用户指令中如果描述了具体的情节、场景或角色行为（如'主角发现xxx'、'在xxx发生yyy'），这些内容必须在本章中完整体现，不得省略、简化或用其他情节替代。\n"
+        "- 如果 current_user_directives.instruction_plot_points 非空，每一个情节要点都必须在正文中得到展开和描写，不能仅一笔带过。\n"
+        "- 如果 current_user_directives.extra_instruction 中包含多个情节要点，每一个要点都必须在正文中得到展开和描写。\n"
         "- banned_patterns 中的模式绝对禁止出现。例如'男主冷笑'被禁止，则全文不得出现。\n"
         "- continuity_contract 要求接续上一章时，开头必须从 previous_ending_state 的场景直接延续，不得跳时间、换地点、宏观总结或切换无关人物。\n"
         "- 自动补齐前置逻辑（writing_optimization_goals.auto_fill_missing_backstory）不得违反用户硬指令 and continuity_contract。\n"
         "- 推进 open_threads 是写作优化目标，不是硬约束，不得因此违反用户指令或接续契约。\n\n"
+        "【叙事连贯性——必须遵守】：\n"
+        "- 本章开头必须承接 continuity_contract.narrative_continuity_requirement 与 previous_ending_state.next_chapter_driver 所描述的因果驱动力：上一章留下的后果、决定或动机，是本章开场的直接出发点。\n"
+        "- 即使场景已切换（scene_continues=false），也禁止用通用时间过场或环境定场作为开场，例如：'天黑了'、'夜幕降临'、'第二天'、'几天后'、'转眼之间'、'与此同时'、'清晨的阳光'等。开场应直接进入承接上一章后果的具体行动或处境。\n"
+        "- 章节之间是同一条故事线的连续推进，不是各自独立的一天或独立小故事；时间推移应通过角色的行动与因果自然带出，而非靠过场句切割。\n"
+        "- 确需较大时间跳跃时，必须由 outline/用户指令明确要求，且开场仍要立刻把读者带回上一章未了的因果链上。\n\n"
+        "【关于悬念与节奏——必须遵守】：\n"
+        "- 不要为了制造钩子而在章节结尾或中途强行插入悬疑：禁止凭空冒出的神秘人物、毫无铺垫的突发危机、与主线无关的反转、刻意吊读者胃口的省略。\n"
+        "- 悬念/伏笔只有在大纲、已确认事实或当前情节自然需要时才使用，并且必须服务于主线推进，事后要能回收。\n"
+        "- 章节结尾应是当前情节的一个自然落点（一个阶段性结果或新的明确动机），而不是一个人为的悬疑断点。\n\n"
+        "【故事线收束——必须遵守】：\n"
+        "- 优先推进并解决 thread_priority.immediate_threads 中的线索；每章应让至少一条已开线索得到实质进展或解决，而不是只顾开新线索。\n"
+        "- 严格控制新开线索的数量：除非剧情必需或用户要求，避免在一章内抛出多条互不相关的新悬念。\n"
+        "- 故事临近大纲规划的结局阶段时，应主动收束 open_threads，使主线逐步聚拢、走向明确结局，而非持续发散。\n\n"
         f"【字数目标】：约 {length_target} 字，请写完完整情节后自然收尾，不要中途截断。\n\n"
         "【输出要求】：\n"
         "- 只输出本章正文，不要输出解释、标题说明、JSON 或 analysis过程。\n"
@@ -650,21 +790,26 @@ def update_continuity_from_updates(updates: Dict[str, Any]) -> None:
     if not ending_state or not isinstance(ending_state, dict):
         ending_state = default_ending_state()
     scene_continues = bool(ending_state.get("scene_continues", False))
+    driver = str(ending_state.get("next_chapter_driver", "")).strip()
+    # 叙事接续始终生效：即使场景切换，下一章开场也必须承接上一章留下的因果驱动力。
+    narrative_req = driver or str(ending_state.get("immediate_unresolved_question", "")).strip()
     contract = {
         "must_start_from_previous_ending": scene_continues,
         "must_not_jump_time": scene_continues,
         "must_not_change_location_immediately": scene_continues,
         "opening_requirement": str(ending_state.get("recommended_next_opening", "")).strip(),
         "allowed_transition_after_words": 0 if scene_continues else 200,
+        "narrative_continuity_requirement": narrative_req,
     }
+    thread_priority = updates.get("thread_priority")
+    if not isinstance(thread_priority, dict):
+        thread_priority = {"immediate_threads": [], "chapter_threads": [], "long_arc_threads": []}
     continuity = {
         "ending_state": ending_state,
         "continuity_contract": contract,
+        "thread_priority": thread_priority,
         "updated_at": utc_now(),
     }
-    save_continuity(continuity)
-
-
     save_continuity(continuity)
 
 
@@ -714,15 +859,16 @@ def generate_chapter_segment_plan(
                     "purpose": "本片段目的",
                     "target_words": DEFAULT_SEGMENT_TARGET_WORDS,
                     "must_start_from_previous_ending": True,
-                    "must_end_with": "本片段应结束在什么状态/悬念/转折",
+                    "must_end_with": "本片段应推进到的叙事状态（事件进展/情绪或关系变化/新的明确动机），不要刻意制造悬念或反转",
                 }
             ],
-            "chapter_ending_target": "本章结尾应达到的状态",
+            "chapter_ending_target": "本章结尾应达到的状态（当前情节的自然落点，而非人为悬疑断点）",
         },
         "requirements": [
             "每个 beat 是章节内部的连续片段，不是独立章节",
             "beats 之间必须自然衔接，不得每个 beat 重新开场",
-            "最后一个 beat 必须为章节结尾做铺垫",
+            "最后一个 beat 必须为章节结尾做铺垫，并推动/解决至少一条已开线索",
+            "不要在 beat 边界刻意制造悬念、神秘人物或突发反转，除非剧情/大纲自然需要",
             "must_end_with 描述本片段结束时应达到的叙事状态，不是字面结尾词",
             "target_words 总和应接近章节 target_words",
             "输出严格 JSON",
@@ -806,8 +952,9 @@ def build_segment_system_prompt(
             "",
             "【末片段特殊规则】：",
             "- 你是本章的最后一个片段，需要为章节做自然收尾。",
-            "- 章节结尾应达到 chapter_ending_target 描述的状态。",
-            "- 可以留下悬念或伏笔，但本章核心叙事应有一个阶段性收束。",
+            "- 章节结尾应达到 chapter_ending_target 描述的状态，是当前情节的自然落点（一个阶段性结果或新的明确动机），而不是人为的悬疑断点。",
+            "- 本章核心冲突应有阶段性收束，并尽量推动或解决一条已开线索；不要为了制造钩子而强行插入悬念、神秘人物或突发反转。",
+            "- 结尾应留下一个清晰的因果驱动力（next_chapter_driver），让下一章能自然承接，而不是靠时间过场切换。",
         ])
     parts.extend([
         "",
@@ -832,6 +979,8 @@ def build_segment_system_prompt(
         "",
         "【约束优先级】（从高到低）：",
         "1. current_user_directives — 用户硬指令",
+        "   → 用户指令中描述的具体情节必须完整体现，不得省略或简化",
+        "   → 如果 instruction_plot_points 非空，每一个情节要点都必须在本片段或本章中得到展开",
         "2. active_instruction_constraints — 长期约束",
         "3. continuity_contract / segment_continuity — 接续契约",
         "4. confirmed_story_facts — 已确认故事事实",
@@ -1392,6 +1541,22 @@ def normalize_outline_draft(draft: Dict[str, Any], story_brief: str) -> Dict[str
     return outline
 
 
+def _merge_instruction(user_instruction: str, planned_instruction: str) -> str:
+    """Merge user's original instruction with planner's instruction.
+
+    User instruction always takes precedence and is preserved in full.
+    Planner's instruction is appended as supplementary guidance.
+    """
+    if not user_instruction:
+        return planned_instruction
+    if not planned_instruction:
+        return user_instruction
+    # If planner's instruction is a subset of user's, just use user's
+    if planned_instruction in user_instruction:
+        return user_instruction
+    return f"【用户要求（必须遵循）】{user_instruction}\n【补充指引】{planned_instruction}"
+
+
 def plan_auto_chapters(
     state: Dict[str, Any],
     start_chapter_no: int,
@@ -1412,16 +1577,17 @@ def plan_auto_chapters(
     max_existing = max(existing_nos) if existing_nos else 0
     writing_rules = safe_dict(outline.get("writing_rules"), default_outline()["writing_rules"])
     default_length = writing_rules.get("chapter_length_target", 1800)
-    system_prompt = """你是小说创作规划师。根据已有大纲和故事进展，为接下来的章节制定详细的写作计划。
+    system_prompt = """你是小说创作规划师。根据已有大纲、故事进展和用户指令，为接下来的章节制定详细的写作计划。
 
 要求：
 1. 只输出严格 JSON，不要输出解释。
 2. 输出一个数组，每个元素包含：chapter_no, title_hint, goal, target_words, tone, instruction。
-3. goal 必须具体描述本章的情节发展，不能为空。
+3. goal 必须具体描述本章的情节发展，不能为空。如果用户指令（user_extra_instruction）中包含具体的情节描述、场景要求或角色行为，goal 必须完整覆盖这些内容，不得省略或概括。
 4. target_words 根据情节复杂度合理分配，通常在 1500-4000 之间。
 5. tone 建议本章的语气风格。
-6. instruction 是给写手的具体创作指引。
-7. 章节之间要有连贯性和递进感。""".strip()
+6. instruction 必须原样保留用户指令（user_extra_instruction）中的所有具体要求、情节描述和约束，并在此基础上补充本章的具体创作指引。绝对不能省略、概括或减少用户指令中的任何内容。
+7. 章节之间要有连贯性和递进感。
+8. 【最高优先级】用户指令中的情节描述和要求，优先级高于大纲的 chapter_plan。如果用户指令与大纲冲突，必须以用户指令为准。""".strip()
 
     recent_summaries = []
     for cs in safe_list(storyline.get("chapter_summaries", []))[-5:]:
@@ -1444,6 +1610,11 @@ def plan_auto_chapters(
         "ending_state": continuity.get("ending_state", default_ending_state()),
         "main_characters": [c for c in safe_list(characters.get("characters", []))[:8]],
         "user_extra_instruction": instruction,
+        "critical_rule": (
+            "user_extra_instruction 中的所有情节描述、场景要求和角色行为必须完整体现在 goal 和 instruction 中。"
+            "不得以任何理由省略或简化用户指令中的具体内容。"
+            "如果用户指令描述了多个事件，每个事件都必须在某一章的 goal 中体现。"
+        ),
     }, ensure_ascii=False, indent=2)
 
     raw = deepseek_chat(
@@ -1474,7 +1645,7 @@ def plan_auto_chapters(
             "goal": str(item.get("goal", outline_plan.get("goal", ""))).strip(),
             "target_words": safe_parse_int(item.get("target_words"), default_length),
             "tone": str(item.get("tone", writing_rules.get("tone", ""))).strip(),
-            "instruction": str(item.get("instruction", instruction)).strip(),
+            "instruction": _merge_instruction(instruction, str(item.get("instruction", "")).strip()),
             "outline_plan": outline_plan,
         })
     while len(result) < count:

@@ -57,5 +57,9 @@ DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 DEEPSEEK_MAX_TOKENS = int(os.getenv("DEEPSEEK_MAX_TOKENS", "8192"))
 DEFAULT_PORT = int(os.getenv("PORT", "8787"))
 MAX_RECENT_TURNS = 10
+KV_WINDOW = int(os.getenv("KV_WINDOW", "5"))          # 注入 KV-cache 的最近完整章数
+ARC_SIZE = int(os.getenv("ARC_SIZE", "5"))             # 每 N 章合并为一条 arc_summary
+CHAT_WINDOW = int(os.getenv("CHAT_WINDOW", "6"))       # 热 chat turns 保留数
+COMPRESS_THRESHOLD = int(os.getenv("COMPRESS_THRESHOLD", "9"))  # 超过这个数触发 chat 压缩
 
 FILE_LOCK = threading.Lock()

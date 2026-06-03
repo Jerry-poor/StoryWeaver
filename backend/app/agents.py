@@ -4,7 +4,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 # Imports from modular packages
-from backend.app.config import MAX_RECENT_TURNS
+from backend.app.config import MAX_RECENT_TURNS, KV_WINDOW, ARC_SIZE, CHAT_WINDOW, COMPRESS_THRESHOLD
 from backend.app.storage import default_conversation_memory, utc_now
 from backend.app.llm import deepseek_chat, parse_json_relaxed
 
@@ -144,14 +144,13 @@ def merge_dialogue_summary(current: Dict[str, Any], patch: Dict[str, Any]) -> Di
 
 def compact_recent_turns(memory: Dict[str, Any]) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
     turns = list(memory.get("recent_turns", []))
-    # chapter turns are kept permanently for KV-cache replay; only compact chat/outline turns
     chapter_turns = [t for t in turns if t.get("type") == "chapter"]
-    other_turns = [t for t in turns if t.get("type") != "chapter"]
+    other_turns   = [t for t in turns if t.get("type") != "chapter"]
     memory.setdefault("next_turn_id", 1)
-    if len(other_turns) <= MAX_RECENT_TURNS:
+    if len(other_turns) <= COMPRESS_THRESHOLD:
         return memory, []
-    removed = other_turns[:-MAX_RECENT_TURNS]
-    retained_other = other_turns[-MAX_RECENT_TURNS:]
+    removed = other_turns[:-CHAT_WINDOW]
+    retained_other = other_turns[-CHAT_WINDOW:]
     all_retained = sorted(chapter_turns + retained_other, key=lambda t: int(t.get("turn_id", 0)))
     memory["recent_turns"] = all_retained
     return memory, removed
@@ -179,4 +178,156 @@ def append_turn(
         turn.update(extra_fields)
     memory.setdefault("recent_turns", []).append(turn)
     memory["next_turn_id"] = next_turn_id + 1
+    return memory
+
+
+def compact_chapter_turns(memory: dict) -> dict:
+    """将超出 KV_WINDOW 的旧 chapter turns 移入 archived_turns 并加入待压缩队列。
+
+    不调用 LLM，纯内存操作，可在写操作结束后同步调用。
+    """
+    turns = list(memory.get("recent_turns", []))
+    chapter_turns = sorted(
+        [t for t in turns if t.get("type") == "chapter" and t.get("confirmed", False)],
+        key=lambda t: int(t.get("turn_id", 0))
+    )
+    other_turns = [t for t in turns if not (t.get("type") == "chapter" and t.get("confirmed", False))]
+
+    if len(chapter_turns) <= KV_WINDOW:
+        return memory
+
+    excess = chapter_turns[:-KV_WINDOW]  # 最旧的需要移出的
+    retained_chapters = chapter_turns[-KV_WINDOW:]
+
+    # 移入冷存档（追加，去重）
+    archived = memory.setdefault("archived_turns", [])
+    existing_ids = {t.get("turn_id") for t in archived}
+    for t in excess:
+        if t.get("turn_id") not in existing_ids:
+            archived.append(t)
+
+    # 加入 arc 压缩队列（每 ARC_SIZE 条一批）
+    pending = memory.setdefault("pending_arc_compression", [])
+    # 只把还没有进入 pending 或 arc_summaries 的 excess 章节加入队列
+    already_queued_chapters = set()
+    for batch in pending:
+        for t in batch:
+            already_queued_chapters.add(t.get("turn_id"))
+    arc_summaries = memory.get("chapter_arc_summaries", [])
+    already_summarized = set()
+    for arc in arc_summaries:
+        for no in range(arc.get("chapter_range", [0, 0])[0],
+                        arc.get("chapter_range", [0, 0])[1] + 1):
+            already_summarized.add(no)
+
+    new_excess = [t for t in excess
+                  if t.get("turn_id") not in already_queued_chapters
+                  and t.get("chapter_no") not in already_summarized]
+
+    # 按 ARC_SIZE 分批加入队列
+    for i in range(0, len(new_excess), ARC_SIZE):
+        batch = new_excess[i:i + ARC_SIZE]
+        if len(batch) == ARC_SIZE:  # 只有满批才压缩（不压缩尾部残余）
+            pending.append(batch)
+
+    # 更新 recent_turns：保留非 confirmed chapter turns + 热窗口 chapter turns
+    memory["recent_turns"] = sorted(
+        other_turns + retained_chapters,
+        key=lambda t: int(t.get("turn_id", 0))
+    )
+    return memory
+
+
+def generate_arc_summary(chapter_turns_batch: list) -> dict:
+    """将一批 chapter turns 用 LLM 压缩为 arc_summary。"""
+    if not chapter_turns_batch:
+        return {}
+
+    chapter_nos = [t.get("chapter_no", 0) for t in chapter_turns_batch]
+    chapter_range = [min(chapter_nos), max(chapter_nos)]
+    arc_no = (chapter_range[0] - 1) // ARC_SIZE + 1
+
+    # 只传摘要字段，不传完整正文（节省 tokens）
+    batch_summary = [
+        {
+            "chapter_no": t.get("chapter_no"),
+            "assistant_summary": t.get("assistant", "")[:300],
+        }
+        for t in chapter_turns_batch
+    ]
+
+    prompt = {
+        "task": "将以下已完成章节整理为弧线摘要，供后续章节生成参考。",
+        "chapters": batch_summary,
+        "output_schema": {
+            "arc_no": arc_no,
+            "chapter_range": chapter_range,
+            "key_events": ["重要事件列表，每条一句话"],
+            "character_state_snapshot": {"角色ID": "当前状态描述"},
+            "open_threads_inherited": ["仍未解决的悬念"],
+            "arc_summary_text": "这一弧线的整体叙事进展，2-3句话",
+        },
+        "requirements": [
+            "key_events 最多 8 条",
+            "character_state_snapshot 只记录有变化的角色",
+            "open_threads_inherited 只列真正未解决的悬念",
+            "输出严格 JSON，不要加解释",
+        ],
+    }
+    messages = [
+        {"role": "system", "content": "你是小说弧线摘要器，只输出严格 JSON。"},
+        {"role": "user", "content": json.dumps(prompt, ensure_ascii=False, indent=2)},
+    ]
+    try:
+        text = deepseek_chat(messages, temperature=0.2)
+        data = parse_json_relaxed(text)
+        if not isinstance(data, dict):
+            raise ValueError("arc summary is not a dict")
+        # 确保必要字段存在
+        data.setdefault("arc_no", arc_no)
+        data.setdefault("chapter_range", chapter_range)
+        data.setdefault("key_events", [])
+        data.setdefault("character_state_snapshot", {})
+        data.setdefault("open_threads_inherited", [])
+        data.setdefault("arc_summary_text", "")
+        return data
+    except Exception:
+        # 降级：用拼接摘要
+        return {
+            "arc_no": arc_no,
+            "chapter_range": chapter_range,
+            "key_events": [],
+            "character_state_snapshot": {},
+            "open_threads_inherited": [],
+            "arc_summary_text": " | ".join(
+                f"第{t.get('chapter_no')}章: {t.get('assistant', '')[:100]}"
+                for t in chapter_turns_batch
+            ),
+        }
+
+
+def drain_arc_compression(memory: dict) -> dict:
+    """同步处理 pending_arc_compression 队列，调用 LLM 生成 arc summaries。
+
+    在章节生成请求开始时调用，清空队列后再构建 context。
+    """
+    pending = memory.get("pending_arc_compression", [])
+    if not pending:
+        return memory
+
+    arc_summaries = memory.setdefault("chapter_arc_summaries", [])
+    existing_arc_nos = {a.get("arc_no") for a in arc_summaries}
+
+    processed = []
+    for batch in pending:
+        arc = generate_arc_summary(batch)
+        arc_no = arc.get("arc_no")
+        if arc_no not in existing_arc_nos:
+            arc_summaries.append(arc)
+            existing_arc_nos.add(arc_no)
+        processed.append(batch)
+
+    # 排序
+    memory["chapter_arc_summaries"] = sorted(arc_summaries, key=lambda a: a.get("arc_no", 0))
+    memory["pending_arc_compression"] = []
     return memory

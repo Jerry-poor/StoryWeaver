@@ -53,6 +53,8 @@ from backend.app.agents import (
     append_turn,
     compact_recent_turns,
     summarize_old_turns,
+    compact_chapter_turns,
+    drain_arc_compression,
 )
 from backend.app.pipeline import (
     generate_outline_from_brief,
@@ -648,6 +650,7 @@ class Handler(BaseHTTPRequestHandler):
         with FILE_LOCK:
             state = read_state()
         memory = state["conversation_memory"]
+        memory = drain_arc_compression(memory)
         context = build_generation_context(state, chapter_no, instruction, tone, length_target)
         current_user_content = json.dumps(context, ensure_ascii=False, indent=2)
         chapter_task_content = json.dumps(context.get("chapter_task", {}), ensure_ascii=False, indent=2)
@@ -756,6 +759,7 @@ class Handler(BaseHTTPRequestHandler):
         with FILE_LOCK:
             state = read_state()
         memory = state["conversation_memory"]
+        memory = drain_arc_compression(memory)
         context = build_generation_context(state, chapter_no, instruction, tone, length_target)
         current_user_content = json.dumps(context, ensure_ascii=False, indent=2)
         system_prompt = build_chapter_system_prompt(length_target)
@@ -903,6 +907,7 @@ class Handler(BaseHTTPRequestHandler):
             })
             save_json(CHARACTERS_PATH, characters)
             save_json(STORYLINE_PATH, storyline)
+            memory = compact_chapter_turns(memory)
             save_json(CONVERSATION_PATH, memory)
             save_json(chapter_path, chapter_record)
         update_continuity_from_updates(updates)
@@ -970,6 +975,7 @@ class Handler(BaseHTTPRequestHandler):
         context = build_generation_context(state, chapter_no, instruction, tone, target_words)
         if generation_mode == "single_segment":
             memory = state["conversation_memory"]
+            memory = drain_arc_compression(memory)
             current_user_content = json.dumps(context, ensure_ascii=False, indent=2)
             system_prompt = build_chapter_system_prompt(target_words)
             messages = build_chapter_messages_with_history(system_prompt, current_user_content, memory)
@@ -1264,6 +1270,7 @@ class Handler(BaseHTTPRequestHandler):
             draft["chapter_task_content"] = chapter_task_content
             if generation_mode == "single_segment":
                 memory = state["conversation_memory"]
+                memory = drain_arc_compression(memory)
                 current_user_content = json.dumps(context, ensure_ascii=False, indent=2)
                 system_prompt = build_chapter_system_prompt(target_words)
                 messages = build_chapter_messages_with_history(system_prompt, current_user_content, memory)
@@ -1423,6 +1430,7 @@ class Handler(BaseHTTPRequestHandler):
                     })
                     save_json(CHARACTERS_PATH, characters)
                     save_json(STORYLINE_PATH, storyline)
+                    memory = compact_chapter_turns(memory)
                     save_json(CONVERSATION_PATH, memory)
                     save_json(chapter_path, chapter_record)
                 update_continuity_from_updates(updates)
