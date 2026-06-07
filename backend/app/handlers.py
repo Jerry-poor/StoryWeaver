@@ -19,7 +19,11 @@ from backend.app.config import (
     CHARACTERS_PATH,
     STORYLINE_PATH,
     CONVERSATION_PATH,
+    INSTRUCTION_REGISTRY_PATH,
     MAX_RECENT_TURNS,
+    DEEPSEEK_BASE_URL,
+    DEEPSEEK_MODEL,
+    DEEPSEEK_MAX_TOKENS,
 )
 from backend.app.storage import (
     read_state,
@@ -37,6 +41,12 @@ from backend.app.storage import (
     load_instruction_registry,
     save_instruction_registry,
     normalize_outline_shape,
+    normalize_instruction_registry,
+    normalize_story_tags,
+    extract_story_tags_from_outline,
+    load_llm_settings,
+    save_llm_settings,
+    normalize_llm_settings,
     utc_now,
     create_snapshot,
     restore_snapshot,
@@ -59,6 +69,7 @@ from backend.app.agents import (
 from backend.app.pipeline import (
     generate_outline_from_brief,
     normalize_outline_draft,
+    revise_outline_with_instruction,
     build_characters_from_outline,
     build_storyline_from_outline,
     reset_generated_story_state,
@@ -84,6 +95,43 @@ from backend.app.pipeline import (
 
 class ClientDisconnectedError(ConnectionError):
     pass
+
+
+class BadRequestError(ValueError):
+    pass
+
+
+def parse_int_param(body: Dict[str, Any], name: str, default: int, minimum: Optional[int] = None, maximum: Optional[int] = None) -> int:
+    raw = body.get(name)
+    if raw in (None, ""):
+        value = default
+    else:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError) as exc:
+            raise BadRequestError(f"{name} must be an integer") from exc
+    if minimum is not None and value < minimum:
+        raise BadRequestError(f"{name} must be >= {minimum}")
+    if maximum is not None and value > maximum:
+        raise BadRequestError(f"{name} must be <= {maximum}")
+    return value
+
+
+def parse_bool_param(body: Dict[str, Any], name: str, default: bool = False) -> bool:
+    raw = body.get(name)
+    if raw is None:
+        return default
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)):
+        return bool(raw)
+    if isinstance(raw, str):
+        value = raw.strip().lower()
+        if value in {"1", "true", "yes", "on"}:
+            return True
+        if value in {"0", "false", "no", "off"}:
+            return False
+    raise BadRequestError(f"{name} must be a boolean")
 
 
 def drain_generation_memory(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -195,7 +243,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.OK, {"chapters": nos})
                 return
             if path.startswith("/api/chapter/"):
-                chapter_no = int(path.rstrip("/").split("/")[-1])
+                try:
+                    chapter_no = int(path.rstrip("/").split("/")[-1])
+                except ValueError:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "chapter_no must be an integer"})
+                    return
+                if chapter_no < 1:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "chapter_no must be >= 1"})
+                    return
                 chapter_path = now_chapter_path(chapter_no)
                 if not chapter_path.exists():
                     self._send_json(HTTPStatus.NOT_FOUND, {"error": "chapter not found"})
@@ -205,6 +260,15 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/snapshots":
                 self._send_json(HTTPStatus.OK, {"snapshots": list_snapshots()})
+                return
+            if path == "/api/llm-settings":
+                settings = load_llm_settings()
+                self._send_json(HTTPStatus.OK, {
+                    "base_url": settings.get("base_url") or DEEPSEEK_BASE_URL,
+                    "model": settings.get("model") or DEEPSEEK_MODEL,
+                    "max_tokens": settings.get("max_tokens") or DEEPSEEK_MAX_TOKENS,
+                    "has_api_key": bool(settings.get("api_key")),
+                })
                 return
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
         except ClientDisconnectedError:
@@ -229,6 +293,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/confirm-outline":
                 self.handle_confirm_outline(body)
                 return
+            if path == "/api/revise-outline":
+                self.handle_revise_outline(body)
+                return
             if path == "/api/save":
                 name = body.get("name")
                 text = body.get("json_text", "")
@@ -239,14 +306,56 @@ class Handler(BaseHTTPRequestHandler):
                     "characters": CHARACTERS_PATH,
                     "storyline": STORYLINE_PATH,
                     "conversation_memory": CONVERSATION_PATH,
+                    "instruction_registry": INSTRUCTION_REGISTRY_PATH,
                 }
                 if name not in mapping:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": "unknown file name"})
                     return
                 data = json.loads(text)
+                if name == "instruction_registry":
+                    data = normalize_instruction_registry(data)
+                elif name == "outline":
+                    data = normalize_outline_shape(data, str(body.get("story_brief", "")).strip())
+                    data["status"] = "confirmed"
+                    data["confirmed_at"] = str(data.get("confirmed_at") or utc_now())
+                elif name == "outline_draft":
+                    data = normalize_outline_draft(data, str(body.get("story_brief", "")).strip())
                 with FILE_LOCK:
                     save_json(mapping[name], data)
+                    if name in {"outline", "outline_draft"}:
+                        registry = load_instruction_registry()
+                        registry["story_tags"] = normalize_story_tags(
+                            registry.get("story_tags", []) + extract_story_tags_from_outline(data)
+                        )
+                        save_instruction_registry(registry)
                 self._send_json(HTTPStatus.OK, {"ok": True, "name": name})
+                return
+            if path == "/api/llm-settings":
+                current = load_llm_settings()
+                next_settings = {
+                    "base_url": str(body.get("base_url", "") or "").strip(),
+                    "model": str(body.get("model", "") or "").strip(),
+                    "api_key": current.get("api_key", ""),
+                    "max_tokens": body.get("max_tokens", current.get("max_tokens", 8192)),
+                }
+                if "api_key" in body:
+                    next_settings["api_key"] = str(body.get("api_key", "") or "").strip()
+                settings = normalize_llm_settings(next_settings)
+                if not settings["base_url"]:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "base_url is required"})
+                    return
+                if not settings["model"]:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "model is required"})
+                    return
+                with FILE_LOCK:
+                    save_llm_settings(settings)
+                self._send_json(HTTPStatus.OK, {
+                    "ok": True,
+                    "base_url": settings["base_url"],
+                    "model": settings["model"],
+                    "max_tokens": settings["max_tokens"],
+                    "has_api_key": bool(settings.get("api_key")),
+                })
                 return
             if path == "/api/chat":
                 if stream_request:
@@ -308,6 +417,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": f"invalid json: {exc}"})
             except ClientDisconnectedError:
                 return
+        except BadRequestError as exc:
+            try:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            except ClientDisconnectedError:
+                return
         except Exception as exc:
             try:
                 self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc), "trace": traceback.format_exc()})
@@ -316,6 +430,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_generate_outline(self, body: Dict[str, Any]) -> None:
         story_brief = str(body.get("story_brief", "")).strip()
+        story_tags = normalize_story_tags(body.get("story_tags", []))
         if not story_brief:
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": "story_brief is required"})
             return
@@ -324,6 +439,7 @@ class Handler(BaseHTTPRequestHandler):
         conversation_context = {
             "dialogue_summary": state["conversation_memory"].get("dialogue_summary", {}),
             "recent_turns": state["conversation_memory"].get("recent_turns", [])[-MAX_RECENT_TURNS:],
+            "story_tags": story_tags,
         }
         draft_raw = generate_outline_from_brief(story_brief, conversation_context)
         draft = normalize_outline_draft(draft_raw, story_brief)
@@ -367,6 +483,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_generate_outline_stream(self, body: Dict[str, Any]) -> None:
         story_brief = str(body.get("story_brief", "")).strip()
+        story_tags = normalize_story_tags(body.get("story_tags", []))
         if not story_brief:
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": "story_brief is required"})
             return
@@ -375,6 +492,7 @@ class Handler(BaseHTTPRequestHandler):
         conversation_context = {
             "dialogue_summary": state["conversation_memory"].get("dialogue_summary", {}),
             "recent_turns": state["conversation_memory"].get("recent_turns", [])[-MAX_RECENT_TURNS:],
+            "story_tags": story_tags,
         }
         messages = [
             {
@@ -384,7 +502,8 @@ class Handler(BaseHTTPRequestHandler):
                     "代码块里必须是可用于后续章节写作的结构化大纲 JSON。"
                     "要求：1. 只输出自然语言加 JSON 代码块，不要额外解释。"
                     "2. 大纲应包含 status, title, genre, theme, logline, world_setting, writing_rules, main_conflict, character_seed, chapter_plan。"
-                    "3. chapter_plan 至少包含 6 章。4. status 必须是 draft。"
+                    "3. writing_rules.story_tags 必须提取用户希望全文遵守的 tag/雷点/风格偏好，后续章节会把它当作全文硬约束。"
+                    "4. chapter_plan 至少包含 6 章。5. status 必须是 draft。"
                 ),
             },
             {
@@ -392,6 +511,7 @@ class Handler(BaseHTTPRequestHandler):
                 "content": json.dumps(
                     {
                         "story_brief": story_brief,
+                        "story_tags": story_tags,
                         "conversation_context": conversation_context,
                     },
                     ensure_ascii=False,
@@ -462,9 +582,15 @@ class Handler(BaseHTTPRequestHandler):
         confirmed = normalize_outline_shape(draft, str(body.get("story_brief", "")).strip())
         confirmed["status"] = "confirmed"
         confirmed["confirmed_at"] = utc_now()
+        outline_tags = normalize_story_tags(
+            extract_story_tags_from_outline(confirmed) + normalize_story_tags(body.get("story_tags", []))
+        )
         with FILE_LOCK:
             save_json(OUTLINE_DRAFT_PATH, confirmed)
             save_json(OUTLINE_PATH, confirmed)
+            registry = load_instruction_registry()
+            registry["story_tags"] = normalize_story_tags(registry.get("story_tags", []) + outline_tags)
+            save_instruction_registry(registry)
         reset_generated_story_state(confirmed)
         create_snapshot("confirm_outline")
         self._send_json(
@@ -475,11 +601,77 @@ class Handler(BaseHTTPRequestHandler):
             },
         )
 
+    def handle_revise_outline(self, body: Dict[str, Any]) -> None:
+        instruction = str(body.get("instruction", "")).strip()
+        target = str(body.get("target", "") or "").strip()
+        outline_json = body.get("outline_json")
+        if not instruction:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "instruction is required"})
+            return
+        with FILE_LOCK:
+            state = read_state()
+        if not target:
+            target = "outline" if (state.get("outline") or {}).get("confirmed_at") else "outline_draft"
+        if target not in {"outline", "outline_draft"}:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "target must be outline or outline_draft"})
+            return
+        try:
+            if outline_json:
+                base_outline = json.loads(outline_json)
+            else:
+                base_outline = state.get(target) or default_outline_draft()
+        except json.JSONDecodeError as exc:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": f"invalid outline json: {exc}"})
+            return
+        base_outline = normalize_outline_shape(base_outline, str(body.get("story_brief", "")).strip())
+        conversation_context = {
+            "dialogue_summary": state["conversation_memory"].get("dialogue_summary", {}),
+            "recent_turns": state["conversation_memory"].get("recent_turns", [])[-MAX_RECENT_TURNS:],
+            "story_tags": normalize_story_tags(body.get("story_tags", [])),
+        }
+        revised_raw = revise_outline_with_instruction(base_outline, instruction, conversation_context)
+        revised = normalize_outline_shape(revised_raw, str(body.get("story_brief", "")).strip() or base_outline.get("source_brief", ""))
+        if target == "outline":
+            revised["status"] = "confirmed"
+            revised["confirmed_at"] = str(base_outline.get("confirmed_at") or utc_now())
+        else:
+            revised["status"] = "draft"
+            revised["confirmed_at"] = ""
+        with FILE_LOCK:
+            save_json(OUTLINE_DRAFT_PATH, revised)
+            if target == "outline":
+                save_json(OUTLINE_PATH, revised)
+            registry = load_instruction_registry()
+            registry["story_tags"] = normalize_story_tags(
+                registry.get("story_tags", []) + extract_story_tags_from_outline(revised)
+            )
+            save_instruction_registry(registry)
+            memory = load_json(CONVERSATION_PATH, default_conversation_memory())
+            memory = append_turn(
+                memory,
+                f"修改大纲。{instruction}",
+                "已根据要求修订大纲。",
+                turn_type="outline",
+            )
+            memory, removed_turns = compact_recent_turns(memory)
+            if removed_turns:
+                memory["dialogue_summary"] = summarize_old_turns(
+                    removed_turns,
+                    memory.get("dialogue_summary", default_conversation_memory()["dialogue_summary"]),
+                )
+            save_json(CONVERSATION_PATH, memory)
+        create_snapshot("revise_outline")
+        payload_key = "outline" if target == "outline" else "outline_draft"
+        self._send_json(HTTPStatus.OK, {"ok": True, "target": target, payload_key: revised, "memory": memory})
+
     def handle_chat(self, body: Dict[str, Any]) -> None:
         user_message = str(body.get("message", "")).strip()
-        chapter_no = int(body.get("chapter_no") or 0)
+        chapter_no = parse_int_param(body, "chapter_no", 0, minimum=0)
         if not user_message:
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": "message is required"})
+            return
+        if chapter_no > 0 and not now_chapter_path(chapter_no).exists():
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": f"chapter {chapter_no} not found"})
             return
         with FILE_LOCK:
             state = read_state()
@@ -490,8 +682,10 @@ class Handler(BaseHTTPRequestHandler):
         chapter_text = ""
         if chapter_no > 0:
             ch_path = now_chapter_path(chapter_no)
-            if ch_path.exists():
-                chapter_text = load_json(ch_path, {}).get("chapter_text", "")
+            if not ch_path.exists():
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": f"chapter {chapter_no} not found"})
+                return
+            chapter_text = load_json(ch_path, {}).get("chapter_text", "")
         context = {
             "task": "章节修改指令",
             "chapter_no": chapter_no,
@@ -516,12 +710,6 @@ class Handler(BaseHTTPRequestHandler):
             ch_path = now_chapter_path(chapter_no)
             updates = extract_chapter_updates(state, chapter_no, result)
             chapter_title = chapter_title_from_updates(chapter_no, updates)
-            storyline = update_storyline(state["storyline"], chapter_no, chapter_title, updates)
-            characters = merge_character_updates(
-                state["characters"],
-                list(updates.get("character_updates", [])),
-                list(updates.get("new_characters", [])),
-            )
             with FILE_LOCK:
                 rec = load_json(ch_path, default_chapter_draft(chapter_no))
                 rec["chapter_text"] = result
@@ -534,8 +722,6 @@ class Handler(BaseHTTPRequestHandler):
                 rec["resolved_threads"] = updates.get("resolved_threads", [])
                 rec["character_updates"] = updates.get("character_updates", [])
                 save_json(ch_path, rec)
-                save_json(CHARACTERS_PATH, characters)
-                save_json(STORYLINE_PATH, storyline)
                 memory = load_json(CONVERSATION_PATH, default_conversation_memory())
                 memory = append_turn(
                     memory,
@@ -551,14 +737,16 @@ class Handler(BaseHTTPRequestHandler):
                         memory.get("dialogue_summary", default_conversation_memory()["dialogue_summary"]),
                     )
                 save_json(CONVERSATION_PATH, memory)
-            update_continuity_from_updates(updates)
         self._send_json(HTTPStatus.OK, {"ok": True, "reply": result, "updates": updates})
 
     def handle_chat_stream(self, body: Dict[str, Any]) -> None:
         user_message = str(body.get("message", "")).strip()
-        chapter_no = int(body.get("chapter_no") or 0)
+        chapter_no = parse_int_param(body, "chapter_no", 0, minimum=0)
         if not user_message:
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": "message is required"})
+            return
+        if chapter_no > 0 and not now_chapter_path(chapter_no).exists():
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": f"chapter {chapter_no} not found"})
             return
         with FILE_LOCK:
             state = read_state()
@@ -569,8 +757,10 @@ class Handler(BaseHTTPRequestHandler):
         chapter_text = ""
         if chapter_no > 0:
             ch_path = now_chapter_path(chapter_no)
-            if ch_path.exists():
-                chapter_text = load_json(ch_path, {}).get("chapter_text", "")
+            if not ch_path.exists():
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": f"chapter {chapter_no} not found"})
+                return
+            chapter_text = load_json(ch_path, {}).get("chapter_text", "")
         context = {
             "task": "章节修改指令",
             "chapter_no": chapter_no,
@@ -602,12 +792,6 @@ class Handler(BaseHTTPRequestHandler):
                 ch_path = now_chapter_path(chapter_no)
                 updates = extract_chapter_updates(state, chapter_no, result)
                 chapter_title = chapter_title_from_updates(chapter_no, updates)
-                storyline = update_storyline(state["storyline"], chapter_no, chapter_title, updates)
-                characters = merge_character_updates(
-                    state["characters"],
-                    list(updates.get("character_updates", [])),
-                    list(updates.get("new_characters", [])),
-                )
                 with FILE_LOCK:
                     rec = load_json(ch_path, default_chapter_draft(chapter_no))
                     rec["chapter_text"] = result
@@ -620,8 +804,6 @@ class Handler(BaseHTTPRequestHandler):
                     rec["resolved_threads"] = updates.get("resolved_threads", [])
                     rec["character_updates"] = updates.get("character_updates", [])
                     save_json(ch_path, rec)
-                    save_json(CHARACTERS_PATH, characters)
-                    save_json(STORYLINE_PATH, storyline)
                     memory = load_json(CONVERSATION_PATH, default_conversation_memory())
                     memory = append_turn(
                         memory,
@@ -637,16 +819,15 @@ class Handler(BaseHTTPRequestHandler):
                             memory.get("dialogue_summary", default_conversation_memory()["dialogue_summary"]),
                         )
                     save_json(CONVERSATION_PATH, memory)
-                update_continuity_from_updates(updates)
             self._send_sse_event("final", {"ok": True, "reply": result, "chapter_no": chapter_no, "updates": updates})
         except Exception as exc:
             self._send_sse_event("error", {"error": str(exc)})
 
     def handle_generate_chapter_stream(self, body: Dict[str, Any]) -> None:
-        chapter_no = int(body.get("chapter_no") or 1)
+        chapter_no = parse_int_param(body, "chapter_no", 1, minimum=1)
         instruction = str(body.get("instruction", "")).strip()
         tone = str(body.get("tone", "")).strip()
-        length_target = int(body.get("length_target") or 1800)
+        length_target = parse_int_param(body, "length_target", 1800, minimum=200)
         chapter_title_hint = str(body.get("chapter_title", "")).strip()
         with FILE_LOCK:
             outline = normalize_outline_shape(load_json(OUTLINE_PATH, default_outline()))
@@ -676,12 +857,6 @@ class Handler(BaseHTTPRequestHandler):
             chapter_text = revised_text
             updates = extract_chapter_updates(state, chapter_no, chapter_text)
             chapter_title = chapter_title_hint or chapter_title_from_updates(chapter_no, updates)
-            storyline = update_storyline(state["storyline"], chapter_no, chapter_title, updates)
-            characters = merge_character_updates(
-                state["characters"],
-                list(updates.get("character_updates", [])),
-                list(updates.get("new_characters", [])),
-            )
             wc = chapter_word_count(chapter_text)
             chapter_record = {
                 "chapter_no": chapter_no,
@@ -710,10 +885,8 @@ class Handler(BaseHTTPRequestHandler):
             if revised_text != raw_text:
                 chapter_record["raw_text_before_revision"] = raw_text
             with FILE_LOCK:
-                save_json(CHARACTERS_PATH, characters)
-                save_json(STORYLINE_PATH, storyline)
                 save_json(now_chapter_path(chapter_no), chapter_record)
-            assistant_summary = f"已生成第{chapter_no}章《{chapter_title}》，并同步更新故事线与角色状态。"
+            assistant_summary = f"已生成第{chapter_no}章《{chapter_title}》草稿，确认后将同步更新故事线与角色状态。"
             if wc:
                 assistant_summary += f" 章节长度约 {wc} 个词块。"
             if needs_user_review:
@@ -758,10 +931,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send_sse_event("error", {"error": str(exc)})
 
     def handle_generate_chapter(self, body: Dict[str, Any]) -> None:
-        chapter_no = int(body.get("chapter_no") or 1)
+        chapter_no = parse_int_param(body, "chapter_no", 1, minimum=1)
         instruction = str(body.get("instruction", "")).strip()
         tone = str(body.get("tone", "")).strip()
-        length_target = int(body.get("length_target") or 1800)
+        length_target = parse_int_param(body, "length_target", 1800, minimum=200)
         chapter_title_hint = str(body.get("chapter_title", "")).strip()
         with FILE_LOCK:
             outline = normalize_outline_shape(load_json(OUTLINE_PATH, default_outline()))
@@ -786,14 +959,8 @@ class Handler(BaseHTTPRequestHandler):
         chapter_text = revised_text
         updates = extract_chapter_updates(state, chapter_no, chapter_text)
         chapter_title = chapter_title_hint or chapter_title_from_updates(chapter_no, updates)
-        storyline = update_storyline(state["storyline"], chapter_no, chapter_title, updates)
-        characters = merge_character_updates(
-            state["characters"],
-            list(updates.get("character_updates", [])),
-            list(updates.get("new_characters", []))
-        )
         wc = chapter_word_count(chapter_text)
-        assistant_summary = f"已生成第{chapter_no}章《{chapter_title}》，并同步更新故事线与角色状态。"
+        assistant_summary = f"已生成第{chapter_no}章《{chapter_title}》草稿，确认后将同步更新故事线与角色状态。"
         if wc:
             assistant_summary += f" 章节长度约 {wc} 个词块。"
         if needs_user_review:
@@ -846,8 +1013,6 @@ class Handler(BaseHTTPRequestHandler):
         if revised_text != raw_text:
             chapter_record["raw_text_before_revision"] = raw_text
         with FILE_LOCK:
-            save_json(CHARACTERS_PATH, characters)
-            save_json(STORYLINE_PATH, storyline)
             save_json(CONVERSATION_PATH, memory)
             save_json(now_chapter_path(chapter_no), chapter_record)
         create_snapshot(f"generate_ch{chapter_no}")
@@ -864,7 +1029,7 @@ class Handler(BaseHTTPRequestHandler):
         })
 
     def handle_confirm_chapter(self, body: Dict[str, Any]) -> None:
-        chapter_no = int(body.get("chapter_no") or 1)
+        chapter_no = parse_int_param(body, "chapter_no", 1, minimum=1)
         with FILE_LOCK:
             chapter_path = now_chapter_path(chapter_no)
             if not chapter_path.exists():
@@ -938,10 +1103,10 @@ class Handler(BaseHTTPRequestHandler):
         })
 
     def handle_start_chapter(self, body: Dict[str, Any]) -> None:
-        chapter_no = int(body.get("chapter_no") or 1)
+        chapter_no = parse_int_param(body, "chapter_no", 1, minimum=1)
         instruction = str(body.get("instruction", "")).strip()
         tone = str(body.get("tone", "")).strip()
-        target_words = int(body.get("target_words") or body.get("length_target") or 1800)
+        target_words = parse_int_param({"target_words": body.get("target_words") or body.get("length_target")}, "target_words", 1800, minimum=200)
         with FILE_LOCK:
             state = read_state()
             if not outline_is_confirmed(state.get("outline", {})):
@@ -967,10 +1132,10 @@ class Handler(BaseHTTPRequestHandler):
         })
 
     def handle_start_chapter_stream(self, body: Dict[str, Any]) -> None:
-        chapter_no = int(body.get("chapter_no") or 1)
+        chapter_no = parse_int_param(body, "chapter_no", 1, minimum=1)
         instruction = str(body.get("instruction", "")).strip()
         tone = str(body.get("tone", "")).strip()
-        target_words = int(body.get("target_words") or body.get("length_target") or 1800)
+        target_words = parse_int_param({"target_words": body.get("target_words") or body.get("length_target")}, "target_words", 1800, minimum=200)
         with FILE_LOCK:
             state = read_state()
             if not outline_is_confirmed(state.get("outline", {})):
@@ -1080,7 +1245,7 @@ class Handler(BaseHTTPRequestHandler):
         })
 
     def handle_continue_chapter(self, body: Dict[str, Any]) -> None:
-        chapter_no = int(body.get("chapter_no") or 1)
+        chapter_no = parse_int_param(body, "chapter_no", 1, minimum=1)
         with FILE_LOCK:
             state = read_state()
             chapter_path = now_chapter_path(chapter_no)
@@ -1111,7 +1276,7 @@ class Handler(BaseHTTPRequestHandler):
         })
 
     def handle_continue_chapter_stream(self, body: Dict[str, Any]) -> None:
-        chapter_no = int(body.get("chapter_no") or 1)
+        chapter_no = parse_int_param(body, "chapter_no", 1, minimum=1)
         with FILE_LOCK:
             state = read_state()
             chapter_path = now_chapter_path(chapter_no)
@@ -1203,8 +1368,8 @@ class Handler(BaseHTTPRequestHandler):
         })
 
     def handle_finish_chapter(self, body: Dict[str, Any]) -> None:
-        chapter_no = int(body.get("chapter_no") or 1)
-        force_end = bool(body.get("force_end", False))
+        chapter_no = parse_int_param(body, "chapter_no", 1, minimum=1)
+        force_end = parse_bool_param(body, "force_end", False)
         with FILE_LOCK:
             chapter_path = now_chapter_path(chapter_no)
             if not chapter_path.exists():
@@ -1231,14 +1396,10 @@ class Handler(BaseHTTPRequestHandler):
         })
 
     def handle_auto_generate_chapters_stream(self, body: Dict[str, Any]) -> None:
-        start_chapter_no = int(body.get("start_chapter_no") or 1)
-        count = int(body.get("count") or 3)
+        start_chapter_no = parse_int_param(body, "start_chapter_no", 1, minimum=1)
+        count = parse_int_param(body, "count", 3, minimum=1, maximum=20)
         instruction = str(body.get("instruction", "")).strip()
-        auto_confirm = bool(body.get("auto_confirm", True))
-        if count < 1:
-            count = 1
-        if count > 20:
-            count = 20
+        auto_confirm = parse_bool_param(body, "auto_confirm", True)
         with FILE_LOCK:
             state = read_state()
             if not outline_is_confirmed(state.get("outline", {})):

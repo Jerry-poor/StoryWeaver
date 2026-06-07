@@ -21,6 +21,7 @@ def main() -> None:
     ensure_dirs()
     ensure_default_files()
     
+    ThreadingHTTPServer.allow_reuse_address = True
     server = ThreadingHTTPServer(("0.0.0.0", DEFAULT_PORT), Handler)
     print(f"Novel writer server running on http://localhost:{DEFAULT_PORT}")
     print(f"DeepSeek base URL: {DEEPSEEK_BASE_URL}")

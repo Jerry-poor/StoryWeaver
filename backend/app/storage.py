@@ -5,6 +5,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
+from uuid import uuid4
 
 # Import config constants
 from backend.app.config import (
@@ -22,6 +23,7 @@ from backend.app.config import (
     INSTRUCTION_REGISTRY_PATH,
     DEFAULT_SEGMENT_TARGET_WORDS,
     FILE_LOCK,
+    LLM_SETTINGS_PATH,
 )
 
 
@@ -53,6 +55,7 @@ def default_outline() -> Dict[str, Any]:
             "pov": "第三人称有限视角",
             "tone": "",
             "chapter_length_target": 1800,
+            "story_tags": [],
         },
         "chapter_plan": [],
     }
@@ -111,11 +114,72 @@ def default_conversation_memory() -> Dict[str, Any]:
 
 def default_instruction_registry() -> Dict[str, Any]:
     return {
+        "story_tags": [],
         "global_constraints": [],
         "chapter_constraints": [],
         "style_preferences": [],
         "banned_patterns": [],
     }
+
+
+def default_llm_settings() -> Dict[str, Any]:
+    return {
+        "base_url": "",
+        "model": "",
+        "api_key": "",
+        "max_tokens": 8192,
+    }
+
+
+def normalize_llm_settings(data: Any) -> Dict[str, Any]:
+    settings = dict(default_llm_settings())
+    if isinstance(data, dict):
+        settings.update(data)
+    settings["base_url"] = str(settings.get("base_url", "") or "").strip().rstrip("/")
+    settings["model"] = str(settings.get("model", "") or "").strip()
+    settings["api_key"] = str(settings.get("api_key", "") or "").strip()
+    try:
+        max_tokens = int(settings.get("max_tokens") or 8192)
+    except (TypeError, ValueError):
+        max_tokens = 8192
+    settings["max_tokens"] = max(512, min(max_tokens, 200000))
+    return settings
+
+
+def normalize_story_tags(value: Any) -> List[str]:
+    if isinstance(value, str):
+        raw_items = value.replace("，", ",").replace("、", ",").split(",")
+    elif isinstance(value, list):
+        raw_items = value
+    else:
+        raw_items = []
+    tags: List[str] = []
+    seen = set()
+    for item in raw_items:
+        tag = str(item or "").strip()
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        tags.append(tag)
+    return tags
+
+
+def extract_story_tags_from_outline(outline: Dict[str, Any]) -> List[str]:
+    writing_rules = safe_dict(outline.get("writing_rules"), default_outline()["writing_rules"])
+    tags: List[str] = []
+    for key in ("story_tags", "tags", "keywords"):
+        tags.extend(normalize_story_tags(writing_rules.get(key)))
+        tags.extend(normalize_story_tags(outline.get(key)))
+    return normalize_story_tags(tags)
+
+
+def normalize_instruction_registry(data: Any) -> Dict[str, Any]:
+    registry = dict(default_instruction_registry())
+    if isinstance(data, dict):
+        registry.update(data)
+    for key in ("story_tags", "global_constraints", "chapter_constraints", "style_preferences", "banned_patterns"):
+        registry[key] = normalize_story_tags(registry.get(key))
+    return registry
 
 
 def default_ending_state() -> Dict[str, Any]:
@@ -226,6 +290,7 @@ def normalize_outline_shape(data: Any, story_brief: str = "") -> Dict[str, Any]:
     outline["confirmed_at"] = str(outline.get("confirmed_at", "") or "")
     outline["world_setting"] = safe_dict(outline.get("world_setting"), default_outline()["world_setting"])
     outline["writing_rules"] = safe_dict(outline.get("writing_rules"), default_outline()["writing_rules"])
+    outline["writing_rules"]["story_tags"] = extract_story_tags_from_outline(outline)
     # Accept common aliases for character_seed
     raw_chars = safe_list(outline.get("character_seed"))
     if not raw_chars:
@@ -240,11 +305,15 @@ def normalize_outline_shape(data: Any, story_brief: str = "") -> Dict[str, Any]:
     for item in chapter_plan:
         if not isinstance(item, dict):
             continue
+        try:
+            chapter_no = int(item.get("chapter_no") or item.get("no") or len(normalized_plan) + 1)
+        except (TypeError, ValueError):
+            chapter_no = len(normalized_plan) + 1
         # Accept aliases for goal
         goal = str(item.get("goal") or item.get("chapter_goal") or item.get("summary") or item.get("description") or "").strip()
         normalized_plan.append(
             {
-                "chapter_no": int(item.get("chapter_no") or item.get("no") or len(normalized_plan) + 1),
+                "chapter_no": chapter_no,
                 "goal": goal,
                 "must_include": safe_list(item.get("must_include")),
                 "cannot_include": safe_list(item.get("cannot_include")),
@@ -284,7 +353,7 @@ def load_json(path: Path, default: Any) -> Any:
 
 
 def save_json(path: Path, data: Any) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp = path.with_name(f"{path.name}.{uuid4().hex}.tmp")
     with tmp.open("w", encoding="utf-8") as fh:
         json.dump(data, fh, ensure_ascii=False, indent=2)
     tmp.replace(path)
@@ -319,7 +388,7 @@ def read_state() -> Dict[str, Any]:
         "characters": load_json(CHARACTERS_PATH, default_characters()),
         "storyline": load_json(STORYLINE_PATH, default_storyline()),
         "conversation_memory": load_json(CONVERSATION_PATH, default_conversation_memory()),
-        "instruction_registry": load_json(INSTRUCTION_REGISTRY_PATH, default_instruction_registry()),
+        "instruction_registry": normalize_instruction_registry(load_json(INSTRUCTION_REGISTRY_PATH, default_instruction_registry())),
         "continuity": load_json(CONTINUITY_PATH, default_continuity()),
     }
 
@@ -329,11 +398,19 @@ def now_chapter_path(chapter_no: int) -> Path:
 
 
 def load_instruction_registry() -> Dict[str, Any]:
-    return load_json(INSTRUCTION_REGISTRY_PATH, default_instruction_registry())
+    return normalize_instruction_registry(load_json(INSTRUCTION_REGISTRY_PATH, default_instruction_registry()))
 
 
 def save_instruction_registry(data: Dict[str, Any]) -> None:
-    save_json(INSTRUCTION_REGISTRY_PATH, data)
+    save_json(INSTRUCTION_REGISTRY_PATH, normalize_instruction_registry(data))
+
+
+def load_llm_settings() -> Dict[str, Any]:
+    return normalize_llm_settings(load_json(LLM_SETTINGS_PATH, default_llm_settings()))
+
+
+def save_llm_settings(data: Dict[str, Any]) -> None:
+    save_json(LLM_SETTINGS_PATH, normalize_llm_settings(data))
 
 
 def load_continuity() -> Dict[str, Any]:
@@ -342,7 +419,8 @@ def load_continuity() -> Dict[str, Any]:
 
 def save_continuity(data: Dict[str, Any]) -> None:
     data["updated_at"] = utc_now()
-    save_json(CONTINUITY_PATH, data)
+    with FILE_LOCK:
+        save_json(CONTINUITY_PATH, data)
 
 
 # ---------------------------------------------------------------------------

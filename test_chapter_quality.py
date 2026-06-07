@@ -16,9 +16,11 @@ class TestInstructionRegistry(unittest.TestCase):
     def test_default_instruction_registry(self):
         reg = sw.default_instruction_registry()
         self.assertIn("global_constraints", reg)
+        self.assertIn("story_tags", reg)
         self.assertIn("chapter_constraints", reg)
         self.assertIn("style_preferences", reg)
         self.assertIn("banned_patterns", reg)
+        self.assertEqual(reg["story_tags"], [])
         self.assertEqual(reg["global_constraints"], [])
 
     def test_load_save_roundtrip(self):
@@ -113,6 +115,7 @@ class TestBuildGenerationContext(unittest.TestCase):
             "storyline": sw.default_storyline(),
             "conversation_memory": sw.default_conversation_memory(),
             "instruction_registry": {
+                "story_tags": ["慢热"],
                 "global_constraints": ["不要写战斗"],
                 "chapter_constraints": [],
                 "style_preferences": [],
@@ -146,8 +149,16 @@ class TestBuildGenerationContext(unittest.TestCase):
     def test_instruction_constraints_injected(self):
         state = self._make_state()
         ctx = sw.build_generation_context(state, 1, "", "", 1800)
+        self.assertEqual(ctx["active_instruction_constraints"]["story_tags"], ["慢热"])
         self.assertEqual(ctx["active_instruction_constraints"]["global_constraints"], ["不要写战斗"])
         self.assertEqual(ctx["active_instruction_constraints"]["banned_patterns"], ["男主冷笑"])
+
+    def test_outline_story_tags_are_promoted_to_constraints(self):
+        state = self._make_state()
+        state["instruction_registry"]["story_tags"] = ["慢热"]
+        state["outline"]["writing_rules"]["story_tags"] = ["强因果", "慢热"]
+        ctx = sw.build_generation_context(state, 1, "", "", 1800)
+        self.assertEqual(ctx["active_instruction_constraints"]["story_tags"], ["慢热", "强因果"])
 
     def test_continuity_contract_injected(self):
         state = self._make_state()
@@ -281,6 +292,29 @@ class TestRunChapterQualityPipeline(unittest.TestCase):
         text, reports, needs_review = sw.run_chapter_quality_pipeline("原始文本", {})
         self.assertTrue(needs_review)
         self.assertEqual(len(reports), 3)
+
+
+class TestChapterEndingStyle(unittest.TestCase):
+    def test_detects_formulaic_chapter_closure(self):
+        result = sw.check_chapter_ending_style("他放下信。\n这场风波终于结束了。", {})
+
+        self.assertFalse(result["natural"])
+        self.assertEqual(result["violations"][0]["type"], "formulaic_chapter_closure")
+        self.assertEqual(result["violations"][0]["severity"], "hard")
+
+    @patch.object(sw, "revise_chapter_with_feedback")
+    @patch.object(sw, "check_chapter_continuity")
+    @patch.object(sw, "check_instruction_compliance")
+    def test_quality_pipeline_revises_formulaic_closure(self, mock_compliance, mock_continuity, mock_revise):
+        mock_compliance.return_value = {"compliant": True, "violations": []}
+        mock_continuity.return_value = {"continuous": True, "violations": [], "revision_instruction": ""}
+        mock_revise.return_value = "他放下信，指尖在信封边缘停了停。"
+
+        text, reports, needs_review = sw.run_chapter_quality_pipeline("他放下信。\n这一章结束了。", {})
+
+        self.assertEqual(text, "他放下信，指尖在信封边缘停了停。")
+        self.assertFalse(needs_review)
+        self.assertEqual(reports[0]["ending_style"]["violations"][0]["type"], "formulaic_chapter_closure")
 
 
 class TestSceneContinuesFlow(unittest.TestCase):
@@ -913,7 +947,7 @@ class TestChapterGenerationHandlers(unittest.TestCase):
     @patch.object(sw, "deepseek_chat_stream")
     @patch.object(sw, "load_json")
     @patch.object(sw, "read_state")
-    def test_generate_chapter_stream_updates_story_state_and_final_payload(
+    def test_generate_chapter_stream_keeps_global_story_state_until_confirmation(
         self, mock_read_state, mock_load_json, mock_stream, mock_quality,
         mock_extract, mock_save, mock_snapshot,
     ):
@@ -931,8 +965,9 @@ class TestChapterGenerationHandlers(unittest.TestCase):
         handler.handle_generate_chapter_stream({"chapter_no": 1, "length_target": 1800})
 
         saved_paths = [call.args[0] for call in mock_save.call_args_list]
-        self.assertIn(sw.CHARACTERS_PATH, saved_paths)
-        self.assertIn(sw.STORYLINE_PATH, saved_paths)
+        self.assertNotIn(sw.CHARACTERS_PATH, saved_paths)
+        self.assertNotIn(sw.STORYLINE_PATH, saved_paths)
+        self.assertIn(sw.now_chapter_path(1), saved_paths)
         final_events = [
             call.args[1] for call in handler._send_sse_event.call_args_list
             if call.args[0] == "final"
@@ -961,6 +996,64 @@ class TestChapterGenerationHandlers(unittest.TestCase):
         self.assertTrue(chapter_saves)
         saved_draft = chapter_saves[-1].args[1]
         self.assertIn('"chapter_no": 2', saved_draft["chapter_task_content"])
+
+
+class TestHandlerValidation(unittest.TestCase):
+    def test_parse_int_param_rejects_invalid_values(self):
+        with self.assertRaises(sw.BadRequestError):
+            sw.parse_int_param({"chapter_no": "abc"}, "chapter_no", 1, minimum=1)
+
+    def test_parse_bool_param_rejects_ambiguous_string(self):
+        with self.assertRaises(sw.BadRequestError):
+            sw.parse_bool_param({"force_end": "maybe"}, "force_end")
+
+    def test_normalize_outline_shape_tolerates_non_numeric_chapter_no(self):
+        outline = sw.normalize_outline_shape({
+            "chapter_plan": [
+                {"chapter_no": "第一章", "goal": "开场"},
+                {"chapter_no": "2", "goal": "推进"},
+            ],
+        })
+
+        self.assertEqual(outline["chapter_plan"][0]["chapter_no"], 1)
+        self.assertEqual(outline["chapter_plan"][1]["chapter_no"], 2)
+
+    def test_normalize_outline_shape_keeps_story_tags(self):
+        outline = sw.normalize_outline_shape({
+            "writing_rules": {"story_tags": "慢热，强因果"},
+            "tags": ["无系统", "慢热"],
+        })
+
+        self.assertEqual(outline["writing_rules"]["story_tags"], ["慢热", "强因果", "无系统"])
+
+    @patch.object(sw, "now_chapter_path")
+    def test_chat_missing_chapter_returns_404_before_llm(self, mock_now_chapter_path):
+        missing_path = MagicMock()
+        missing_path.exists.return_value = False
+        mock_now_chapter_path.return_value = missing_path
+        handler = object.__new__(sw.Handler)
+        handler._send_json = MagicMock()
+
+        handler.handle_chat({"message": "修改一下", "chapter_no": 9})
+
+        status, payload = handler._send_json.call_args[0]
+        self.assertEqual(status, sw.HTTPStatus.NOT_FOUND)
+        self.assertIn("not found", payload["error"])
+
+
+class TestOutlineRevision(unittest.TestCase):
+    @patch.object(sw, "deepseek_chat")
+    def test_revise_outline_with_instruction_returns_normalized_json_candidate(self, mock_chat):
+        mock_chat.return_value = json.dumps({
+            **sw.default_outline(),
+            "title": "新标题",
+            "chapter_plan": [{"chapter_no": 1, "goal": "新的开场"}],
+        }, ensure_ascii=False)
+
+        result = sw.revise_outline_with_instruction(sw.default_outline(), "改标题", {})
+
+        self.assertEqual(result["title"], "新标题")
+        self.assertEqual(result["chapter_plan"][0]["goal"], "新的开场")
 
 
 if __name__ == "__main__":

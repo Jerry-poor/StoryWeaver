@@ -44,6 +44,9 @@ from backend.app.storage import (
     load_instruction_registry,
     load_continuity,
     save_continuity,
+    normalize_instruction_registry,
+    normalize_story_tags,
+    extract_story_tags_from_outline,
 )
 from backend.app.llm import deepseek_chat, deepseek_chat_stream, parse_json_relaxed, short_chat_response
 from backend.app.agents import merge_list_unique
@@ -258,6 +261,11 @@ def build_generation_context(state: Dict[str, Any], chapter_no: int, instruction
     memory = state["conversation_memory"]
     registry = state.get("instruction_registry") or load_instruction_registry()
     continuity = state.get("continuity") or load_continuity()
+    writing_rules = safe_dict(outline.get("writing_rules"), default_outline()["writing_rules"])
+    registry = normalize_instruction_registry(registry)
+    registry["story_tags"] = normalize_story_tags(
+        registry.get("story_tags", []) + extract_story_tags_from_outline(outline)
+    )
     chapter_plan = select_chapter_plan(outline, chapter_no)
     recent_non_chapter = [t for t in memory.get("recent_turns", []) if t.get("type") != "chapter"]
     arc_summaries = memory.get("chapter_arc_summaries", [])
@@ -270,8 +278,8 @@ def build_generation_context(state: Dict[str, Any], chapter_no: int, instruction
         "current_user_directives": {
             "extra_instruction": instruction,
             "instruction_plot_points": _extract_plot_points(instruction),
-            "tone": tone or safe_dict(outline.get("writing_rules"), default_outline()["writing_rules"]).get("tone", ""),
-            "length_target": length_target or safe_dict(outline.get("writing_rules"), default_outline()["writing_rules"]).get("chapter_length_target", 1800),
+            "tone": tone or writing_rules.get("tone", ""),
+            "length_target": length_target or writing_rules.get("chapter_length_target", 1800),
         },
         "active_instruction_constraints": registry,
         "continuity_contract": continuity.get("continuity_contract", default_continuity_contract()),
@@ -582,6 +590,43 @@ GENERIC_OPENER_PATTERNS = re.compile(
 )
 
 
+FORMULAIC_ENDING_PATTERNS = re.compile(
+    r"(这一[章节幕段场][^。！？!?]{0,18}(?:结束|落幕|收束)了?[。！？!?]?$|"
+    r"(?:本章|这章|这个章节|这段故事|这场风波|这场危机|这一切|这一夜|这一天)[^。！？!?]{0,24}(?:结束|落幕|告一段落|暂时平息|画上句号)了?[。！？!?]?$|"
+    r"(?:故事|命运|旅程|冒险)[^。！？!?]{0,24}(?:才刚刚开始|仍在继续|还远没有结束)[。！？!?]?$|"
+    r"[^。！？!?]{0,30}(?:终于|总算)[^。！？!?]{0,18}(?:结束|告一段落|平息)了?[。！？!?]?$)"
+)
+
+
+def _last_nonempty_paragraph(text: str) -> str:
+    paragraphs = [p.strip() for p in re.split(r"\n+", text.strip()) if p.strip()]
+    return paragraphs[-1] if paragraphs else ""
+
+
+def check_chapter_ending_style(chapter_text: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    ending = _last_nonempty_paragraph(chapter_text)
+    if not ending:
+        return {"natural": True, "violations": [], "revision_instruction": ""}
+    ending_tail = ending[-120:]
+    match = FORMULAIC_ENDING_PATTERNS.search(ending_tail)
+    if not match:
+        return {"natural": True, "violations": [], "revision_instruction": ""}
+    return {
+        "natural": False,
+        "violations": [{
+            "type": "formulaic_chapter_closure",
+            "description": "章节结尾使用了总结式/报幕式套话，而不是停在具体行动、感受、选择或场景细节上",
+            "evidence": match.group(0),
+            "severity": "hard",
+        }],
+        "revision_instruction": (
+            "重写最后一段，删除'结束了/落幕/告一段落/画上句号/故事仍在继续'等总结式报幕句。"
+            "结尾应停在角色的具体动作、未说出口的反应、一个明确决定、场景中的细节或自然余韵上；"
+            "不要替读者总结这一章已经结束，也不要用旁白宣布故事进入下一阶段。"
+        ),
+    }
+
+
 def check_chapter_continuity(chapter_text: str, context: Dict[str, Any]) -> Dict[str, Any]:
     contract = context.get("continuity_contract", default_continuity_contract())
     ending_state = context.get("previous_ending_state", default_ending_state())
@@ -669,19 +714,28 @@ def revise_chapter_with_feedback(
     context: Dict[str, Any],
     compliance_result: Dict[str, Any],
     continuity_result: Dict[str, Any],
+    ending_style_result: Optional[Dict[str, Any]] = None,
 ) -> str:
     violations: List[str] = []
+    ending_style_result = ending_style_result or {"violations": [], "revision_instruction": ""}
     for v in compliance_result.get("violations", []):
         if isinstance(v, dict) and v.get("severity") == "hard":
             violations.append(f"[指令违反] {v.get('rule', '')}: {v.get('evidence', '')}")
     for v in continuity_result.get("violations", []):
         if isinstance(v, dict) and v.get("severity") == "hard":
             violations.append(f"[接续违反] {v.get('description', '')}: {v.get('evidence', '')}")
-    revision_instruction = continuity_result.get("revision_instruction", "")
-    if not violations and not revision_instruction:
+    for v in ending_style_result.get("violations", []):
+        if isinstance(v, dict) and v.get("severity") == "hard":
+            violations.append(f"[结尾套话] {v.get('description', '')}: {v.get('evidence', '')}")
+    revision_instructions = [
+        str(continuity_result.get("revision_instruction", "")).strip(),
+        str(ending_style_result.get("revision_instruction", "")).strip(),
+    ]
+    revision_instructions = [item for item in revision_instructions if item]
+    if not violations and not revision_instructions:
         return chapter_text
     feedback_parts = violations.copy()
-    if revision_instruction:
+    for revision_instruction in revision_instructions:
         feedback_parts.append(f"[修订指令] {revision_instruction}")
     feedback = "\n".join(feedback_parts)
     prompt = {
@@ -695,6 +749,8 @@ def revise_chapter_with_feedback(
             "只输出修订后的完整章节正文，不要输出解释",
             "必须解决所有 hard violation",
             "如果反馈指出开头时间跳转，必须改为从上一章结尾场景直接接续",
+            "如果反馈指出结尾套话，只改写最后一段：删除总结式报幕句，让章节停在具体动作、选择、感受或场景细节上",
+            "修订后的最后一句不得包含'结束了'、'落幕'、'告一段落'、'画上句号'、'故事仍在继续'等总结式收束表达",
             "如果反馈指出包含禁止模式，必须删除或替换该模式",
             "不得引入新的违反",
             "保持文风和视角一致",
@@ -717,6 +773,7 @@ def run_chapter_quality_pipeline(chapter_text: str, context: Dict[str, Any]) -> 
     for attempt in range(3):
         compliance_result = check_instruction_compliance(current_text, context)
         continuity_result = check_chapter_continuity(current_text, context)
+        ending_style_result = check_chapter_ending_style(current_text, context)
         has_hard_compliance = any(
             isinstance(v, dict) and v.get("severity") == "hard"
             for v in compliance_result.get("violations", [])
@@ -725,11 +782,22 @@ def run_chapter_quality_pipeline(chapter_text: str, context: Dict[str, Any]) -> 
             isinstance(v, dict) and v.get("severity") == "hard"
             for v in continuity_result.get("violations", [])
         )
-        if not has_hard_compliance and not has_hard_continuity and continuity_result.get("continuous", True):
+        has_hard_ending = any(
+            isinstance(v, dict) and v.get("severity") == "hard"
+            for v in ending_style_result.get("violations", [])
+        )
+        if (
+            not has_hard_compliance
+            and not has_hard_continuity
+            and not has_hard_ending
+            and continuity_result.get("continuous", True)
+            and ending_style_result.get("natural", True)
+        ):
             quality_reports.append({
                 "attempt": attempt + 1,
                 "compliance": compliance_result,
                 "continuity": continuity_result,
+                "ending_style": ending_style_result,
                 "result": "passed",
             })
             break
@@ -737,10 +805,13 @@ def run_chapter_quality_pipeline(chapter_text: str, context: Dict[str, Any]) -> 
             "attempt": attempt + 1,
             "compliance": compliance_result,
             "continuity": continuity_result,
+            "ending_style": ending_style_result,
             "result": "revision_needed",
         })
         if attempt < 2:
-            current_text = revise_chapter_with_feedback(current_text, context, compliance_result, continuity_result)
+            current_text = revise_chapter_with_feedback(
+                current_text, context, compliance_result, continuity_result, ending_style_result
+            )
         else:
             needs_user_review = True
     return current_text, quality_reports, needs_user_review
@@ -752,7 +823,7 @@ def build_chapter_system_prompt(length_target: int) -> str:
         "【约束优先级】（从高到低，前者绝对高于后者，冲突时必须服从高优先级）：\n"
         "1. current_user_directives — 当前用户硬指令（extra_instruction、instruction_plot_points、tone、length_target）\n"
         "   → 用户指令中描述的具体情节、场景和角色行为必须在正文中完整体现，不得省略\n"
-        "2. active_instruction_constraints — 长期约束注册表（global_constraints、chapter_constraints、banned_patterns、style_preferences）\n"
+        "2. active_instruction_constraints — 长期约束注册表（story_tags、global_constraints、chapter_constraints、banned_patterns、style_preferences）\n"
         "3. continuity_contract — 章节接续契约（必须从上一章结尾接起、不得跳时间/换地点等）\n"
         "4. confirmed_story_facts — 已确认的故事事实（之前章节已发生的事件）\n"
         "5. characters — 角色状态（性格、动机、当前位置和情绪）\n"
@@ -761,6 +832,7 @@ def build_chapter_system_prompt(length_target: int) -> str:
         "8. writing_optimization_goals — 写作优化目标（推进 open_threads、自动补齐前置逻辑等）\n\n"
         "【关键规则】：\n"
         "- 用户硬指令和长期约束绝对优先于大纲。如果用户说'不要写战斗'，即使大纲有战斗目标也不得写战斗。\n"
+        "- active_instruction_constraints.story_tags 是全文必须持续应用的文章标签、风格标签和内容标签；每一章都必须体现这些 tag，不得写出与 tag 明显冲突的风格、题材、尺度或内容。\n"
         "- 用户指令中如果描述了具体的情节、场景或角色行为（如'主角发现xxx'、'在xxx发生yyy'），这些内容必须在本章中完整体现，不得省略、简化或用其他情节替代。\n"
         "- 如果 current_user_directives.instruction_plot_points 非空，每一个情节要点都必须在正文中得到展开和描写，不能仅一笔带过。\n"
         "- 如果 current_user_directives.extra_instruction 中包含多个情节要点，每一个要点都必须在正文中得到展开和描写。\n"
@@ -777,6 +849,10 @@ def build_chapter_system_prompt(length_target: int) -> str:
         "- 不要为了制造钩子而在章节结尾或中途强行插入悬疑：禁止凭空冒出的神秘人物、毫无铺垫的突发危机、与主线无关的反转、刻意吊读者胃口的省略。\n"
         "- 悬念/伏笔只有在大纲、已确认事实或当前情节自然需要时才使用，并且必须服务于主线推进，事后要能回收。\n"
         "- 章节结尾应是当前情节的一个自然落点（一个阶段性结果或新的明确动机），而不是一个人为的悬疑断点。\n\n"
+        "【章节结尾写法——必须遵守】：\n"
+        "- 不要用总结式、报幕式、评论式句子结束章节，例如'这一章结束了'、'这场风波终于结束了'、'一切告一段落'、'故事才刚刚开始'、'命运的齿轮开始转动'。\n"
+        "- 最后一段应停在具体可感的叙事瞬间：角色的动作、一个决定、未说出口的反应、场景里的物件/声音/光线，或由前文自然推出的情绪余韵。\n"
+        "- 不要替读者总结本章意义，也不要宣布危机/夜晚/故事已经结束；让正文自己自然停住。\n\n"
         "【故事线收束——必须遵守】：\n"
         "- 优先推进并解决 thread_priority.immediate_threads 中的线索；每章应让至少一条已开线索得到实质进展或解决，而不是只顾开新线索。\n"
         "- 严格控制新开线索的数量：除非剧情必需或用户要求，避免在一章内抛出多条互不相关的新悬念。\n"
@@ -960,6 +1036,8 @@ def build_segment_system_prompt(
             "- 章节结尾应达到 chapter_ending_target 描述的状态，是当前情节的自然落点（一个阶段性结果或新的明确动机），而不是人为的悬疑断点。",
             "- 本章核心冲突应有阶段性收束，并尽量推动或解决一条已开线索；不要为了制造钩子而强行插入悬念、神秘人物或突发反转。",
             "- 结尾应留下一个清晰的因果驱动力（next_chapter_driver），让下一章能自然承接，而不是靠时间过场切换。",
+            "- 不得用'这一章结束了'、'这场风波结束了'、'一切告一段落'、'故事仍在继续'等总结式报幕句作为最后一句。",
+            "- 最后一段应停在具体动作、决定、感受或场景细节上，让读者自然感到段落停住。",
         ])
     parts.extend([
         "",
@@ -987,6 +1065,7 @@ def build_segment_system_prompt(
         "   → 用户指令中描述的具体情节必须完整体现，不得省略或简化",
         "   → 如果 instruction_plot_points 非空，每一个情节要点都必须在本片段或本章中得到展开",
         "2. active_instruction_constraints — 长期约束",
+        "   → story_tags 是全文标签，每个片段都必须持续体现，不得只在大纲或首章体现",
         "3. continuity_contract / segment_continuity — 接续契约",
         "4. confirmed_story_facts — 已确认故事事实",
         "5. characters — 角色状态",
@@ -1478,7 +1557,8 @@ def generate_outline_from_brief(story_brief: str, conversation_context: Dict[str
 3. character_seed 必须列出所有主要角色（至少 2 个），每个角色包含 name, role, personality(数组), motivation, appearance。
 4. chapter_plan 至少包含 6 章，且每章必须包含 chapter_no, goal(本章具体剧情目标,不能为空), must_include, cannot_include。
 5. status 必须是 "draft"。
-6. 不要直接写章节正文。
+6. writing_rules.story_tags 必须提取用户描述中希望全文遵守的 tag，例如题材、风格、叙事禁忌、尺度、CP/感情线、爽点、雷点；后续章节会把这些 tag 当作全文硬约束。
+7. 不要直接写章节正文。
 """.strip()
     user_prompt = {
         "story_brief": story_brief,
@@ -1497,6 +1577,7 @@ def generate_outline_from_brief(story_brief: str, conversation_context: Dict[str
                 "pov": "第三人称有限视角",
                 "tone": "",
                 "chapter_length_target": 1800,
+                "story_tags": ["全文标签/风格标签/内容标签"],
             },
             "main_conflict": "",
             "character_seed": [
@@ -1522,6 +1603,7 @@ def generate_outline_from_brief(story_brief: str, conversation_context: Dict[str
             "character_seed 必须包含故事中提到的所有主要角色，不能为空",
             "每章的 goal 必须写具体的剧情目标，不能留空",
             "保持章节目标清晰递进",
+            "把用户明确写出的 tag、雷点、风格偏好放入 writing_rules.story_tags，不能只写进简介或章节计划",
             "预留冲突升级和伏笔回收空间",
         ],
     }
@@ -1544,6 +1626,37 @@ def normalize_outline_draft(draft: Dict[str, Any], story_brief: str) -> Dict[str
     outline["source_brief"] = story_brief
     outline["confirmed_at"] = ""
     return outline
+
+
+def revise_outline_with_instruction(
+    outline: Dict[str, Any],
+    instruction: str,
+    conversation_context: Dict[str, Any],
+) -> Dict[str, Any]:
+    prompt = {
+        "task": "根据用户修改要求修订小说结构化大纲 JSON。",
+        "current_outline": outline,
+        "revision_instruction": instruction,
+        "conversation_context": conversation_context,
+        "requirements": [
+            "只输出修订后的严格 JSON，不要输出解释、Markdown 或代码块之外的文字",
+            "保留原大纲的 status、source_brief、confirmed_at，除非用户明确要求改变",
+            "保留原 JSON 结构：status, title, genre, theme, logline, world_setting, writing_rules, main_conflict, character_seed, chapter_plan",
+            "如果用户要求增删改章节，必须同步调整 chapter_plan，并保证 chapter_no 连续递增",
+            "每章 goal 必须是具体剧情目标，不能留空",
+            "保留并强化 writing_rules.story_tags；如果用户新增全文风格、雷点或内容约束，加入 story_tags",
+            "不要写章节正文",
+        ],
+    }
+    messages = [
+        {"role": "system", "content": "你是小说大纲编辑 agent。只输出修订后的严格 JSON。"},
+        {"role": "user", "content": json.dumps(prompt, ensure_ascii=False, indent=2)},
+    ]
+    text = deepseek_chat(messages, temperature=0.25)
+    data = parse_json_relaxed(text)
+    if not isinstance(data, dict):
+        raise ValueError("outline revision did not return JSON object")
+    return data
 
 
 def _merge_instruction(user_instruction: str, planned_instruction: str) -> str:

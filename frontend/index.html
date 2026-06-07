@@ -5,71 +5,100 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>StoryWeaver — 你的AI创作伙伴</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..800;1,400..800&family=Outfit:wght@300;400;500;600;700;800&family=Noto+Serif+SC:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
 
     :root {
       color-scheme: dark;
-      --bg: #111113;
-      --bg-elevated: #1a1a1f;
-      --bg-surface: #222228;
-      --bg-hover: #2a2a32;
-      --border: rgba(255,255,255,0.06);
-      --border-active: rgba(255,255,255,0.12);
-      --text: #f0ece4;
-      --text-secondary: #a09e96;
-      --text-muted: #6b6963;
-      --accent: #d4a053;
-      --accent-soft: rgba(212,160,83,0.12);
-      --accent-hover: #e0b46a;
-      --success: #6bcf8e;
-      --success-soft: rgba(107,207,142,0.12);
-      --danger: #e87070;
-      --danger-soft: rgba(232,112,112,0.12);
-      --info: #7eb8e0;
-      --info-soft: rgba(126,184,224,0.12);
-      --radius-sm: 8px;
-      --radius-md: 12px;
+      
+      /* Base Colors */
+      --bg: #070709;
+      --bg-elevated: #101014;
+      --bg-surface: #17171d;
+      --bg-hover: #212129;
+      
+      /* Borders */
+      --border: rgba(255, 255, 255, 0.05);
+      --border-hover: rgba(223, 168, 87, 0.15);
+      --border-active: rgba(223, 168, 87, 0.3);
+      
+      /* Typography Colors */
+      --text: #f5f2eb;            /* Soft Cream */
+      --text-secondary: #a8a59e;  /* Warm Muted Gray */
+      --text-muted: #6e6b64;      /* Deep Slate/Bronze */
+      
+      /* Accents */
+      --accent: #dfa857;          /* Rich Amber Gold */
+      --accent-soft: rgba(223, 168, 87, 0.08);
+      --accent-glow: rgba(223, 168, 87, 0.2);
+      --accent-hover: #ebd09b;
+      
+      /* System Indicators (Harmonized) */
+      --success: #52b788;
+      --success-soft: rgba(82, 183, 136, 0.15);
+      --danger: #e56b6f;
+      --danger-soft: rgba(229, 107, 111, 0.15);
+      --info: #4a90e2;
+      --info-soft: rgba(74, 144, 226, 0.15);
+      
+      /* Geometry */
+      --radius-sm: 6px;
+      --radius-md: 10px;
       --radius-lg: 16px;
-      --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
-      --shadow-md: 0 4px 16px rgba(0,0,0,0.3);
-      --shadow-lg: 0 8px 32px rgba(0,0,0,0.4);
-      --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      --font-sans: "SF Pro Display", "PingFang SC", "Microsoft YaHei", -apple-system, sans-serif;
-      --font-serif: "Noto Serif SC", "Songti SC", "SimSun", serif;
-      --font-mono: ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
+      --radius-xl: 24px;
+      
+      /* Shadow System */
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+      --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+      --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      --shadow-glow: 0 0 20px rgba(223, 168, 87, 0.15);
+      
+      /* Animation System */
+      --transition-fast: 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+      --transition-normal: 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+      --transition-slow: 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+      
+      /* Fonts */
+      --font-sans: 'Outfit', 'PingFang SC', -apple-system, sans-serif;
+      --font-serif: 'EB Garamond', 'Noto Serif SC', 'Songti SC', serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, monospace;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+    html { font-size: 16px; -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
 
     body {
       font-family: var(--font-sans);
       background: var(--bg);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(223, 168, 87, 0.03) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(74, 144, 226, 0.02) 0px, transparent 50%),
+        radial-gradient(at 50% 100%, rgba(223, 168, 87, 0.02) 0px, transparent 50%);
+      background-attachment: fixed;
       color: var(--text);
       min-height: 100vh;
       overflow-x: hidden;
+      position: relative;
     }
 
-    body::before {
-      content: '';
+    /* Tactile Paper Grain Overlay */
+    body::after {
+      content: "";
       position: fixed;
-      top: -50%; left: -50%;
-      width: 200%; height: 200%;
-      background: radial-gradient(ellipse at 30% 20%, rgba(212,160,83,0.04) 0%, transparent 50%),
-                  radial-gradient(ellipse at 70% 80%, rgba(126,184,224,0.03) 0%, transparent 50%);
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.012'/%3E%3C/svg%3E");
       pointer-events: none;
-      z-index: 0;
+      z-index: 9999;
     }
 
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.1); }
+    ::-webkit-scrollbar-thumb { background: rgba(223, 168, 87, 0.08); border-radius: 4px; border: 2px solid var(--bg); }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(223, 168, 87, 0.2); }
 
     .app-layout {
       display: grid;
-      grid-template-columns: 260px 1fr;
-      grid-template-rows: 60px 1fr;
+      grid-template-columns: 280px 1fr;
+      grid-template-rows: 64px 1fr;
       min-height: 100vh;
       position: relative;
       z-index: 1;
@@ -80,174 +109,255 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 24px;
+      padding: 0 32px;
       border-bottom: 1px solid var(--border);
-      background: rgba(17,17,19,0.85);
+      background: rgba(7, 7, 9, 0.8);
       backdrop-filter: blur(20px) saturate(1.2);
       z-index: 20;
     }
 
-    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo { display: flex; align-items: center; gap: 12px; text-decoration: none; cursor: default; }
 
     .logo-icon {
-      width: 32px; height: 32px;
-      background: linear-gradient(135deg, var(--accent), #c0883a);
+      width: 34px; height: 34px;
+      background: linear-gradient(135deg, var(--accent), #9c723c);
       border-radius: 8px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 16px;
-      box-shadow: 0 2px 8px rgba(212,160,83,0.3);
+      font-size: 18px;
+      font-family: var(--font-serif);
+      color: #070709;
+      font-weight: 700;
+      box-shadow: 0 4px 12px rgba(223, 168, 87, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transition: all var(--transition-normal);
+    }
+    
+    .logo:hover .logo-icon {
+      transform: rotate(10deg) scale(1.05);
+      box-shadow: 0 6px 18px rgba(223, 168, 87, 0.25);
     }
 
     .logo-text {
-      font-size: 18px; font-weight: 700; letter-spacing: -0.3px;
+      font-family: var(--font-serif);
+      font-size: 20px; font-weight: 700; letter-spacing: 0.5px;
       background: linear-gradient(135deg, var(--text), var(--accent));
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
+      user-select: none;
     }
 
-    .header-actions { display: flex; align-items: center; gap: 8px; }
+    .header-actions { display: flex; align-items: center; gap: 10px; }
 
     .sidebar {
       grid-row: 2;
       border-right: 1px solid var(--border);
-      background: var(--bg-elevated);
+      background: linear-gradient(180deg, var(--bg-elevated) 0%, #0c0c10 100%);
       overflow-y: auto;
       display: flex;
       flex-direction: column;
+      padding: 24px 16px;
+      gap: 20px;
     }
 
-    .sidebar-section { padding: 16px; }
+    .sidebar-section { display: flex; flex-direction: column; gap: 4px; }
 
     .sidebar-label {
       font-size: 11px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: 0.08em;
+      text-transform: uppercase; letter-spacing: 0.15em;
       color: var(--text-muted);
-      margin-bottom: 8px; padding: 0 8px;
-    }
-
-    .nav-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 12px;
-      border-radius: var(--radius-md);
-      cursor: pointer;
-      transition: all var(--transition);
-      font-size: 14px;
-      color: var(--text-secondary);
-      border: 1px solid transparent;
+      margin-bottom: 8px; padding: 0 12px;
       user-select: none;
     }
 
-    .nav-item:hover { background: var(--bg-hover); color: var(--text); }
+    .nav-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 11px 14px;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all var(--transition-normal);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      border: 1px solid transparent;
+      user-select: none;
+      position: relative;
+    }
+
+    .nav-item::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 25%; height: 50%; width: 3px;
+      background-color: var(--accent);
+      border-radius: 99px;
+      opacity: 0;
+      transform: scaleY(0.3);
+      transition: all var(--transition-normal);
+    }
+
+    .nav-item:hover {
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text);
+      transform: translateX(2px);
+    }
 
     .nav-item.active {
       background: var(--accent-soft);
       color: var(--accent);
-      border-color: rgba(212,160,83,0.15);
+      border-color: rgba(223, 168, 87, 0.06);
+    }
+
+    .nav-item.active::before {
+      opacity: 1;
+      transform: scaleY(1);
     }
 
     .nav-item .icon {
       width: 20px; height: 20px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 15px; flex-shrink: 0;
+      font-size: 16px; flex-shrink: 0;
+      transition: transform var(--transition-normal);
+    }
+
+    .nav-item:hover .icon {
+      transform: scale(1.1);
     }
 
     .nav-item .badge {
       margin-left: auto;
-      font-size: 11px; padding: 2px 7px;
+      font-size: 10px; padding: 2px 8px;
       border-radius: 99px;
-      background: var(--accent-soft);
+      background: rgba(223, 168, 87, 0.12);
       color: var(--accent);
-      font-weight: 600;
+      font-weight: 700;
+      border: 1px solid rgba(223, 168, 87, 0.15);
     }
 
-    .sidebar-divider { height: 1px; background: var(--border); margin: 4px 16px; }
+    .sidebar-divider { height: 1px; background: var(--border); margin: 0 12px; }
 
     .sidebar-actions {
       margin-top: auto;
-      padding: 16px;
-      border-top: 1px solid var(--border);
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 12px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
     }
 
     .new-story-btn {
       display: flex; align-items: center; justify-content: center; gap: 8px;
-      width: 100%; padding: 10px 0;
+      width: 100%; padding: 12px 0;
       border-radius: var(--radius-md);
-      border: 1px dashed var(--border);
+      border: 1px dashed rgba(223, 168, 87, 0.25);
       background: transparent;
       color: var(--text-secondary);
-      font-size: 13px; font-weight: 500;
+      font-family: var(--font-sans);
+      font-size: 13px; font-weight: 600;
       cursor: pointer;
-      transition: all 0.2s ease;
+      transition: all var(--transition-normal);
     }
+
     .new-story-btn:hover {
       border-color: var(--danger);
       color: var(--danger);
-      background: rgba(232,112,112,0.06);
+      background: rgba(229, 107, 111, 0.05);
+      box-shadow: 0 0 15px rgba(229, 107, 111, 0.05);
     }
 
     .confirm-overlay {
       position: fixed; inset: 0;
-      background: rgba(0,0,0,0.6);
+      background: rgba(4, 4, 6, 0.6);
+      backdrop-filter: blur(8px);
       display: flex; align-items: center; justify-content: center;
       z-index: 200;
-      animation: fadeIn 0.15s ease;
+      animation: fadeIn var(--transition-fast);
     }
+
     .confirm-dialog {
       background: var(--bg-elevated);
-      border: 1px solid var(--border);
+      border: 1px solid rgba(223, 168, 87, 0.1);
       border-radius: var(--radius-lg);
-      padding: 28px;
-      max-width: 400px; width: 90%;
-      box-shadow: var(--shadow-lg);
-      animation: scaleIn 0.2s ease;
+      padding: 32px;
+      max-width: 420px; width: 90%;
+      box-shadow: var(--shadow-lg), var(--shadow-glow);
+      animation: scaleIn var(--transition-normal);
     }
-    .confirm-dialog h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
-    .confirm-dialog p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 20px; }
-    .confirm-dialog .confirm-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+    .confirm-dialog h3 {
+      font-family: var(--font-serif);
+      font-size: 18px; font-weight: 700; margin-bottom: 12px;
+      color: var(--text);
+    }
+
+    .confirm-dialog p {
+      font-size: 14px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px;
+    }
+
+    .confirm-dialog .confirm-actions { display: flex; gap: 12px; justify-content: flex-end; }
 
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    @keyframes scaleIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
 
     .main-content {
       grid-row: 2;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
+      position: relative;
     }
 
-    .content-header { padding: 24px 32px 0; }
+    .content-header {
+      padding: 40px 48px 0;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+      box-sizing: border-box;
+    }
 
-    .content-header h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+    .content-header h2 {
+      font-family: var(--font-serif);
+      font-size: 28px; font-weight: 700; letter-spacing: 0.5px;
+      color: var(--text);
+    }
 
-    .content-header .subtitle { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+    .content-header .subtitle {
+      font-size: 14px; color: var(--text-secondary); margin-top: 6px;
+      font-family: var(--font-sans);
+    }
 
-    .content-body { padding: 20px 32px 32px; flex: 1; }
+    .content-body {
+      padding: 24px 48px 48px;
+      flex: 1;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+      box-sizing: border-box;
+    }
 
     .btn {
-      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-      padding: 9px 16px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 10px 20px;
       border-radius: var(--radius-md);
-      font-size: 13px; font-weight: 500;
+      font-size: 13px; font-weight: 600;
       font-family: var(--font-sans);
       cursor: pointer;
       border: 1px solid transparent;
-      transition: all var(--transition);
+      transition: all var(--transition-normal);
       white-space: nowrap;
       user-select: none;
+      position: relative;
+      overflow: hidden;
     }
 
     .btn-primary {
-      background: linear-gradient(135deg, var(--accent), #c0883a);
-      color: #1a1a1f;
-      box-shadow: 0 2px 8px rgba(212,160,83,0.25);
+      background: linear-gradient(135deg, var(--accent) 0%, #9c723c 100%);
+      color: #070709;
+      box-shadow: 0 4px 12px rgba(223, 168, 87, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .btn-primary:hover {
-      background: linear-gradient(135deg, var(--accent-hover), #d09a4a);
-      box-shadow: 0 4px 12px rgba(212,160,83,0.35);
+      background: linear-gradient(135deg, var(--accent-hover) 0%, var(--accent) 100%);
+      box-shadow: 0 6px 20px rgba(223, 168, 87, 0.3);
       transform: translateY(-1px);
     }
 
@@ -256,110 +366,186 @@
     .btn-secondary {
       background: var(--bg-surface);
       color: var(--text);
-      border-color: var(--border-active);
+      border-color: var(--border);
     }
 
-    .btn-secondary:hover { background: var(--bg-hover); border-color: rgba(255,255,255,0.18); }
+    .btn-secondary:hover {
+      background: var(--bg-hover);
+      border-color: rgba(223, 168, 87, 0.2);
+      color: var(--accent);
+      transform: translateY(-1px);
+    }
 
-    .btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
-    .btn-ghost:hover { background: var(--bg-hover); color: var(--text); }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-secondary);
+      border-color: transparent;
+    }
+    
+    .btn-ghost:hover {
+      background: rgba(255,255,255,0.02);
+      color: var(--text);
+    }
 
-    .btn-danger { background: var(--danger-soft); color: var(--danger); border-color: rgba(232,112,112,0.2); }
-    .btn-danger:hover { background: rgba(232,112,112,0.2); }
+    .btn-danger {
+      background: var(--danger-soft);
+      color: var(--danger);
+      border-color: rgba(229, 107, 111, 0.2);
+    }
+    
+    .btn-danger:hover {
+      background: rgba(229, 107, 111, 0.18);
+      border-color: rgba(229, 107, 111, 0.35);
+      color: #ff858a;
+      transform: translateY(-1px);
+    }
 
-    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+    .btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+      transform: none !important;
+      box-shadow: none !important;
+    }
 
-    .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: var(--radius-sm); }
+    .btn-sm { padding: 8px 14px; font-size: 12px; border-radius: var(--radius-sm); }
 
-    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group { display: flex; flex-direction: column; gap: 8px; }
 
-    .form-label { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+    .form-label {
+      font-size: 13px; font-weight: 600;
+      color: var(--text-secondary);
+      letter-spacing: 0.2px;
+    }
 
-    .form-hint { font-size: 12px; color: var(--text-muted); }
+    .form-hint { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 
-    textarea, input[type="text"], input[type="number"], select {
+    textarea, input[type="text"], input[type="number"], input[type="password"], select {
       width: 100%;
       background: var(--bg-surface);
       color: var(--text);
-      border: 1px solid var(--border-active);
+      border: 1px solid var(--border);
       border-radius: var(--radius-md);
-      padding: 10px 14px;
+      padding: 12px 16px;
       font: inherit; font-size: 14px;
-      transition: all var(--transition);
+      transition: all var(--transition-normal);
       outline: none;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
     }
 
-    textarea:focus, input[type="text"]:focus, input[type="number"]:focus, select:focus {
+    textarea:focus, input[type="text"]:focus, input[type="number"]:focus, input[type="password"]:focus, select:focus {
       border-color: var(--accent);
-      box-shadow: 0 0 0 3px var(--accent-soft);
+      box-shadow: 0 0 0 3px var(--accent-soft), inset 0 2px 4px rgba(0, 0, 0, 0.1);
+      background-color: var(--bg-hover);
     }
 
     textarea { resize: vertical; line-height: 1.6; }
-    textarea::placeholder, input::placeholder { color: var(--text-muted); }
+    textarea::placeholder, input::placeholder { color: var(--text-muted); opacity: 1; }
 
     .card {
       background: var(--bg-elevated);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
       overflow: hidden;
+      transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
+      position: relative;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.03) 50%, transparent 100%);
+    }
+
+    .card:hover {
+      border-color: rgba(223, 168, 87, 0.1);
+      box-shadow: var(--shadow-lg);
     }
 
     .card-header {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 16px 20px;
+      padding: 18px 24px;
       border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.01);
     }
 
-    .card-header h3 { font-size: 15px; font-weight: 600; }
+    .card-header h3 {
+      font-family: var(--font-serif);
+      font-size: 16px; font-weight: 600;
+      color: var(--text);
+      letter-spacing: 0.5px;
+    }
 
-    .card-body { padding: 20px; }
+    .card-body { padding: 24px; }
 
     .tab-bar {
-      display: flex; gap: 2px;
-      background: var(--bg-surface);
+      display: flex; gap: 4px;
+      background: rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--border);
       border-radius: var(--radius-md);
-      padding: 3px;
+      padding: 4px;
       overflow-x: auto;
     }
 
     .tab-item {
-      padding: 7px 14px;
+      padding: 8px 16px;
       border-radius: var(--radius-sm);
-      font-size: 13px; font-weight: 500;
+      font-size: 13px; font-weight: 600;
       cursor: pointer;
-      transition: all var(--transition);
+      transition: all var(--transition-normal);
       color: var(--text-secondary);
       border: none; background: transparent;
       white-space: nowrap;
       font-family: var(--font-sans);
     }
 
-    .tab-item:hover { color: var(--text); }
+    .tab-item:hover { color: var(--text); background: rgba(255, 255, 255, 0.01); }
 
     .tab-item.active {
-      background: var(--bg-elevated);
-      color: var(--text);
+      background: var(--bg-surface);
+      color: var(--accent);
       box-shadow: var(--shadow-sm);
+      border: 1px solid rgba(223, 168, 87, 0.08);
     }
 
     .chip {
-      display: inline-flex; align-items: center; gap: 4px;
-      padding: 3px 10px;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 12px;
       border-radius: 99px;
-      font-size: 11px; font-weight: 600;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+      border: 1px solid transparent;
     }
 
-    .chip-success { background: var(--success-soft); color: var(--success); }
-    .chip-warning { background: var(--accent-soft); color: var(--accent); }
-    .chip-danger { background: var(--danger-soft); color: var(--danger); }
-    .chip-info { background: var(--info-soft); color: var(--info); }
+    .chip-success {
+      background: var(--success-soft);
+      color: var(--success);
+      border-color: rgba(82, 183, 136, 0.15);
+    }
+    .chip-warning {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: rgba(223, 168, 87, 0.15);
+    }
+    .chip-danger {
+      background: var(--danger-soft);
+      color: var(--danger);
+      border-color: rgba(229, 107, 111, 0.15);
+    }
+    .chip-info {
+      background: var(--info-soft);
+      color: var(--info);
+      border-color: rgba(74, 144, 226, 0.15);
+    }
 
     .status-bar {
-      display: flex; align-items: center; gap: 8px;
-      padding: 10px 16px;
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px;
       border-radius: var(--radius-md);
       font-size: 13px;
-      background: var(--bg-surface);
+      background: rgba(0, 0, 0, 0.15);
       border: 1px solid var(--border);
       color: var(--text-secondary);
     }
@@ -369,92 +555,182 @@
       border-radius: 50%;
       background: var(--text-muted);
       flex-shrink: 0;
+      position: relative;
     }
 
     .status-dot.active {
       background: var(--success);
-      box-shadow: 0 0 8px rgba(107,207,142,0.4);
-      animation: pulse 2s infinite;
+      box-shadow: 0 0 8px var(--success);
+    }
+    .status-dot.active::after {
+      content: '';
+      position: absolute; inset: -2px;
+      border-radius: 50%;
+      border: 2px solid var(--success);
+      opacity: 1;
+      animation: ripple 2s infinite;
     }
 
-    .status-dot.warning { background: var(--accent); }
-    .status-dot.error { background: var(--danger); }
+    .status-dot.warning {
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+    }
+    .status-dot.warning::after {
+      content: '';
+      position: absolute; inset: -2px;
+      border-radius: 50%;
+      border: 2px solid var(--accent);
+      opacity: 1;
+      animation: ripple 2s infinite;
+    }
+
+    .status-dot.error {
+      background: var(--danger);
+      box-shadow: 0 0 8px var(--danger);
+    }
+
+    @keyframes ripple {
+      0% { transform: scale(1); opacity: 1; }
+      100% { transform: scale(2.2); opacity: 0; }
+    }
 
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
     .empty-state {
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      padding: 48px 24px; text-align: center;
+      padding: 64px 24px; text-align: center;
     }
 
-    .empty-state .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
-    .empty-state h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
-    .empty-state p { font-size: 14px; color: var(--text-muted); max-width: 320px; line-height: 1.5; }
+    .empty-state .icon { font-size: 56px; margin-bottom: 20px; opacity: 0.35; filter: grayscale(1); }
+    .empty-state h3 { font-family: var(--font-serif); font-size: 18px; font-weight: 600; margin-bottom: 8px; color: var(--text-secondary); }
+    .empty-state p { font-size: 14px; color: var(--text-muted); max-width: 360px; line-height: 1.6; }
 
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .stack { display: flex; flex-direction: column; gap: 16px; }
-    .row { display: flex; align-items: center; gap: 8px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    .llm-settings-card input {
+      min-height: 52px;
+    }
+
+    .llm-settings-card .card-header {
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .llm-settings-card .card-header h3 {
+      min-width: 0;
+    }
+
+    .llm-settings-card .chip {
+      text-transform: none;
+    }
+    .stack { display: flex; flex-direction: column; gap: 20px; }
+    .row { display: flex; align-items: center; gap: 12px; }
 
     .chapter-text {
       font-family: var(--font-serif);
       white-space: pre-wrap;
-      line-height: 2; font-size: 15px;
-      color: var(--text); letter-spacing: 0.3px;
+      line-height: 2;
+      font-size: 17px;
+      color: #eae5da; /* slightly warmer paper-white */
+      letter-spacing: 0.5px;
+      max-width: 720px;
+      margin: 24px auto 0;
+      padding: 0 16px;
+      text-align: justify;
     }
 
-    .preview-section { margin-bottom: 16px; }
+    .preview-section { margin-bottom: 20px; }
 
     .preview-section-title {
-      font-size: 12px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: 0.06em;
-      color: var(--text-muted); margin-bottom: 8px;
+      font-size: 12px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-muted); margin-bottom: 10px;
     }
 
     .preview-list { list-style: none; padding: 0; }
     .preview-list li {
-      padding: 6px 0;
+      padding: 8px 0;
       border-bottom: 1px solid var(--border);
-      font-size: 13px; line-height: 1.5;
+      font-size: 13px; line-height: 1.6;
       color: var(--text-secondary);
     }
     .preview-list li:last-child { border-bottom: none; }
 
     .character-card {
-      background: var(--bg-surface);
+      background: var(--bg-elevated);
       border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 14px;
-      transition: all var(--transition);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      transition: all var(--transition-normal);
+      box-shadow: var(--shadow-sm);
     }
 
-    .character-card:hover { border-color: var(--border-active); }
+    .character-card:hover {
+      border-color: rgba(223, 168, 87, 0.15);
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+    }
 
-    .character-name { font-weight: 600; color: var(--accent); font-size: 14px; }
-    .character-role { font-size: 12px; color: var(--text-muted); margin-left: 6px; }
-    .character-detail { font-size: 12px; color: var(--text-secondary); margin-top: 6px; line-height: 1.5; }
+    .character-name {
+      font-family: var(--font-serif);
+      font-size: 16px; font-weight: 700;
+      color: var(--accent);
+    }
+    
+    .character-role {
+      font-size: 12px; font-weight: 500;
+      color: var(--text-muted);
+      margin-left: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .character-detail {
+      font-size: 13px; color: var(--text-secondary);
+      margin-top: 10px; line-height: 1.6;
+      border-top: 1px solid rgba(255, 255, 255, 0.02);
+      padding-top: 8px;
+    }
 
     .bubble {
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      padding: 14px 16px;
-      background: var(--bg-surface);
-      transition: all var(--transition);
+      padding: 16px 20px;
+      background: var(--bg-elevated);
+      transition: all var(--transition-normal);
+      margin-bottom: 16px;
+      box-shadow: var(--shadow-sm);
     }
 
-    .bubble.user { border-color: rgba(212,160,83,0.2); background: var(--accent-soft); }
-    .bubble.assistant { border-color: rgba(126,184,224,0.2); background: var(--info-soft); }
+    .bubble.user {
+      border-color: rgba(223, 168, 87, 0.15);
+      background: linear-gradient(135deg, rgba(223, 168, 87, 0.05) 0%, rgba(223, 168, 87, 0.01) 100%);
+    }
+    
+    .bubble.assistant {
+      border-color: rgba(74, 144, 226, 0.15);
+      background: linear-gradient(135deg, rgba(74, 144, 226, 0.04) 0%, rgba(74, 144, 226, 0.01) 100%);
+    }
 
     .bubble .label {
-      font-size: 11px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: 0.06em;
-      color: var(--text-muted); margin-bottom: 8px;
+      font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-muted); margin-bottom: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      padding-bottom: 4px;
+      display: inline-block;
     }
 
     .bubble pre {
       margin: 0; white-space: pre-wrap; word-break: break-word;
-      font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
-      color: var(--text-secondary);
+      font-family: var(--font-serif); font-size: 14px; line-height: 1.8;
+      color: var(--text);
+    }
+    
+    .bubble.assistant pre {
+      color: var(--text);
     }
 
     .stream-log {
@@ -463,44 +739,59 @@
     }
 
     .json-editor {
-      width: 100%; min-height: 200px;
-      background: var(--bg);
-      color: var(--text-secondary);
-      border: 1px solid var(--border-active);
+      width: 100%; min-height: 350px;
+      background: #09090c;
+      color: #9cdcfe; /* Nice VS Code-style blue-ish grey text */
+      border: 1px solid var(--border);
       border-radius: var(--radius-md);
-      padding: 12px;
-      font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
+      padding: 16px;
+      font-family: var(--font-mono); font-size: 13px; line-height: 1.6;
       resize: vertical; outline: none;
-      transition: border-color var(--transition);
+      transition: all var(--transition-normal);
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
     }
 
-    .json-editor:focus { border-color: var(--accent); }
+    .json-editor:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft), inset 0 2px 8px rgba(0, 0, 0, 0.5);
+    }
 
     .outline-plan-item {
-      display: flex; gap: 12px;
-      padding: 10px 0;
+      display: flex; gap: 16px;
+      padding: 16px 0;
       border-bottom: 1px solid var(--border);
       align-items: flex-start;
+      transition: background-color var(--transition-normal);
+    }
+
+    .outline-plan-item:hover {
+      background-color: rgba(255,255,255,0.01);
     }
 
     .outline-plan-item:last-child { border-bottom: none; }
 
     .outline-chapter-no {
-      width: 28px; height: 28px;
+      width: 32px; height: 32px;
       border-radius: 50%;
       background: var(--accent-soft);
+      border: 1px solid rgba(223, 168, 87, 0.15);
       color: var(--accent);
       display: flex; align-items: center; justify-content: center;
-      font-size: 12px; font-weight: 700;
+      font-size: 13px; font-weight: 700;
       flex-shrink: 0;
     }
 
-    .outline-chapter-goal { font-size: 13px; line-height: 1.5; color: var(--text-secondary); padding-top: 3px; }
+    .outline-chapter-goal {
+      font-size: 14px; line-height: 1.7;
+      color: var(--text-secondary);
+      padding-top: 4px;
+      flex: 1;
+    }
 
     .page { display: none; }
     .page.active { display: block; }
 
-    .fade-in { animation: fadeIn 0.3s ease; }
+    .fade-in { animation: fadeIn var(--transition-normal) forwards; }
 
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(8px); }
@@ -509,94 +800,122 @@
 
     .story-meta-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
     }
 
     .meta-item {
       background: var(--bg-surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
-      padding: 12px;
+      padding: 16px;
+      transition: all var(--transition-normal);
+    }
+    .meta-item:hover {
+      border-color: rgba(223, 168, 87, 0.1);
     }
 
     .meta-item .label {
       font-size: 11px; color: var(--text-muted);
-      text-transform: uppercase; letter-spacing: 0.06em;
-      margin-bottom: 4px;
+      text-transform: uppercase; letter-spacing: 0.15em;
+      margin-bottom: 6px;
+      font-weight: 600;
     }
 
     .meta-item .value { font-size: 14px; font-weight: 600; color: var(--text); }
 
-    .chapter-selector { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chapter-selector { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
 
     .chapter-selector .chapter-btn {
-      padding: 5px 14px;
+      padding: 6px 16px;
       border-radius: 99px;
-      font-size: 12px; font-weight: 500;
+      font-size: 13px; font-weight: 600;
       cursor: pointer;
-      border: 1px solid var(--border-active);
+      border: 1px solid var(--border);
       background: var(--bg-surface);
       color: var(--text-secondary);
-      transition: all var(--transition);
+      transition: all var(--transition-normal);
       font-family: var(--font-sans);
     }
 
-    .chapter-selector .chapter-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .chapter-selector .chapter-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--bg-hover);
+    }
 
     .chapter-selector .chapter-btn.active {
       background: var(--accent-soft);
-      border-color: rgba(212,160,83,0.3);
+      border-color: rgba(223, 168, 87, 0.3);
       color: var(--accent);
+      box-shadow: 0 0 10px rgba(223, 168, 87, 0.05);
     }
 
     .mobile-menu-btn {
       display: none;
-      width: 36px; height: 36px;
+      width: 40px; height: 40px;
       align-items: center; justify-content: center;
       border-radius: var(--radius-md);
-      border: 1px solid var(--border-active);
+      border: 1px solid var(--border);
       background: var(--bg-surface);
       color: var(--text);
       cursor: pointer;
-      font-size: 18px;
+      font-size: 20px;
+      transition: all var(--transition-normal);
+    }
+    
+    .mobile-menu-btn:hover {
+      background: var(--bg-hover);
+      border-color: rgba(223, 168, 87, 0.2);
     }
 
     .overlay {
       display: none;
       position: fixed; inset: 0;
-      background: rgba(0,0,0,0.5);
+      background: rgba(4, 4, 6, 0.6);
+      backdrop-filter: blur(4px);
       z-index: 15;
+      animation: fadeIn var(--transition-fast);
     }
 
     .toast-container {
       position: fixed;
-      top: 72px; right: 24px;
-      display: flex; flex-direction: column; gap: 8px;
+      top: 80px; right: 32px;
+      display: flex; flex-direction: column; gap: 10px;
       z-index: 100;
       pointer-events: none;
     }
 
     .toast {
-      display: flex; align-items: center; gap: 10px;
-      padding: 12px 18px;
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 20px;
       border-radius: var(--radius-md);
       background: var(--bg-elevated);
       border: 1px solid var(--border);
       box-shadow: var(--shadow-lg);
-      font-size: 13px;
+      font-size: 14px;
+      font-weight: 500;
       color: var(--text);
       pointer-events: auto;
-      animation: toastIn 0.3s ease;
-      max-width: 380px;
+      animation: toastIn var(--transition-normal);
+      max-width: 400px;
+      backdrop-filter: blur(10px);
     }
 
     .toast.out { animation: toastOut 0.25s ease forwards; }
 
-    .toast-icon { font-size: 16px; flex-shrink: 0; }
+    .toast-icon { font-size: 18px; flex-shrink: 0; }
+    
+    .toast-success { border-color: rgba(82, 183, 136, 0.15); background: rgba(82, 183, 136, 0.02); }
     .toast-success .toast-icon { color: var(--success); }
+    
+    .toast-error { border-color: rgba(229, 107, 111, 0.15); background: rgba(229, 107, 111, 0.02); }
     .toast-error .toast-icon { color: var(--danger); }
+    
+    .toast-warning { border-color: rgba(223, 168, 87, 0.15); background: rgba(223, 168, 87, 0.02); }
     .toast-warning .toast-icon { color: var(--accent); }
+    
+    .toast-info { border-color: rgba(74, 144, 226, 0.15); background: rgba(74, 144, 226, 0.02); }
     .toast-info .toast-icon { color: var(--info); }
 
     @keyframes toastIn {
@@ -613,54 +932,127 @@
     .btn.loading::after {
       content: '';
       position: absolute;
-      width: 16px; height: 16px;
+      width: 18px; height: 18px;
       border: 2px solid transparent;
       border-top-color: currentColor;
       border-radius: 50%;
       animation: spin 0.6s linear infinite;
+      left: calc(50% - 9px);
+      top: calc(50% - 9px);
     }
-    .btn-primary.loading::after { border-top-color: #1a1a1f; }
+    .btn-primary.loading::after { border-top-color: #070709; }
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .chapter-nav {
-      display: flex; align-items: center; gap: 8px;
-      margin-top: 16px;
-      padding-top: 16px;
+      display: flex; align-items: center; gap: 12px;
+      margin-top: 24px;
+      padding-top: 24px;
       border-top: 1px solid var(--border);
     }
 
     .chapter-nav .btn { flex: 1; }
 
-    .auto-gen-card { border: 1px solid var(--accent); background: var(--accent-soft); }
-    .auto-gen-card .card-header { border-bottom-color: rgba(212,160,83,0.2); }
+    .write-console {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.025)),
+        rgba(16, 16, 20, 0.72);
+      backdrop-filter: blur(22px) saturate(1.25);
+      -webkit-backdrop-filter: blur(22px) saturate(1.25);
+      box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .write-mode-switch {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: var(--radius-lg);
+      background: rgba(255, 255, 255, 0.035);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      margin-bottom: 18px;
+    }
+
+    .write-mode-option {
+      border: 1px solid transparent;
+      border-radius: var(--radius-md);
+      padding: 16px 18px;
+      text-align: left;
+      color: var(--text-secondary);
+      background: rgba(255, 255, 255, 0.025);
+      cursor: pointer;
+      transition: all var(--transition-normal);
+      font-family: var(--font-sans);
+    }
+
+    .write-mode-option:hover {
+      color: var(--text);
+      border-color: rgba(223, 168, 87, 0.18);
+      background: rgba(255, 255, 255, 0.055);
+      transform: translateY(-1px);
+    }
+
+    .write-mode-option.active {
+      color: var(--text);
+      border-color: rgba(223, 168, 87, 0.36);
+      background: linear-gradient(135deg, rgba(223, 168, 87, 0.18), rgba(255, 255, 255, 0.055));
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+
+    .write-mode-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .write-mode-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .write-panel { display: none; }
+    .write-panel.active { display: block; }
+
+    .auto-gen-card { border: 1px solid rgba(223, 168, 87, 0.16); background: rgba(255, 255, 255, 0.025); }
+    .auto-gen-card .card-header { border-bottom-color: rgba(223, 168, 87, 0.1); }
 
     .progress-bar-track {
       width: 100%; height: 6px;
-      background: var(--bg-surface);
+      background: rgba(0, 0, 0, 0.2);
       border-radius: 3px;
       overflow: hidden;
-      margin-top: 8px;
+      margin-top: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.02);
     }
+    
     .progress-bar-fill {
       height: 100%;
-      background: var(--accent);
+      background: linear-gradient(90deg, var(--accent) 0%, #ebd09b 100%);
       border-radius: 3px;
-      transition: width 0.4s ease;
+      transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .auto-gen-log {
       max-height: 300px;
       overflow-y: auto;
-      font-size: 12px;
+      font-size: 13px;
       line-height: 1.8;
       color: var(--text-secondary);
-      padding: 12px;
-      background: var(--bg);
+      padding: 16px;
+      background: #09090c;
+      border: 1px solid var(--border);
       border-radius: var(--radius-md);
-      margin-top: 12px;
+      margin-top: 16px;
     }
-    .auto-gen-log .log-item { padding: 2px 0; }
+    .auto-gen-log .log-item { padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.01); }
+    .auto-gen-log .log-item:last-child { border-bottom: none; }
     .auto-gen-log .log-item.done { color: var(--success); }
     .auto-gen-log .log-item.active { color: var(--accent); font-weight: 600; }
     .auto-gen-log .log-item.error { color: var(--danger); }
@@ -668,18 +1060,19 @@
     @media (max-width: 900px) {
       .app-layout { grid-template-columns: 1fr; }
       .sidebar {
-        position: fixed; left: -280px; top: 60px; bottom: 0;
-        width: 260px; z-index: 16;
-        transition: left var(--transition);
+        position: fixed; left: -300px; top: 64px; bottom: 0;
+        width: 280px; z-index: 16;
+        transition: left var(--transition-normal);
         box-shadow: var(--shadow-lg);
+        background: var(--bg-elevated);
       }
       .sidebar.open { left: 0; }
       .overlay.open { display: block; }
       .mobile-menu-btn { display: flex; }
-      .content-header { padding: 20px 16px 0; }
-      .content-body { padding: 16px; }
+      .content-header { padding: 30px 24px 0; }
+      .content-body { padding: 20px 24px 24px; }
       .grid-2 { grid-template-columns: 1fr; }
-      .toast-container { right: 12px; left: 12px; }
+      .toast-container { right: 16px; left: 16px; top: 80px; }
       .toast { max-width: 100%; }
     }
 
@@ -695,7 +1088,7 @@
       <div class="row">
         <button class="mobile-menu-btn" id="mobileMenuBtn">☰</button>
         <div class="logo">
-          <div class="logo-icon">✦</div>
+          <div class="logo-icon">✒</div>
           <span class="logo-text">StoryWeaver</span>
         </div>
       </div>
@@ -782,8 +1175,14 @@
                     <textarea id="storyBriefInput" style="min-height:160px" placeholder="比如：一个在末日废墟中寻找失落文明的少女，意外发现人类并非地球唯一的主人……"></textarea>
                     <span class="form-hint">越详细的描述，生成的大纲越贴合你的想法</span>
                   </div>
+                  <div class="form-group">
+                    <label class="form-label">全文 Tag</label>
+                    <textarea id="storyTagsInput" style="min-height:70px" placeholder="如：克制慢热、无系统、强因果、不要狗血误会、第一感情线必须稳定"></textarea>
+                    <span class="form-hint">用逗号或换行分隔；这些 tag 会作为全文硬约束应用到每章</span>
+                  </div>
                   <div class="row">
                     <button class="btn btn-primary" id="generateOutlineBtn">✨ 生成大纲</button>
+                    <button class="btn btn-secondary" id="saveStoryTagsBtn">保存 Tag</button>
                     <button class="btn btn-secondary" id="confirmOutlineBtn">✓ 确认大纲</button>
                   </div>
                 </div>
@@ -825,20 +1224,53 @@
             </div>
             <div id="writeReady" style="display:none">
               <div class="stack">
-                <div class="card">
-                  <div class="card-header"><h3>章节设置</h3><span class="chip chip-success">大纲已确认</span></div>
+                <div class="card write-console">
+                  <div class="card-header"><h3>写作控制台</h3><span class="chip chip-success">大纲已确认</span></div>
                   <div class="card-body">
-                    <div class="stack">
-                      <div class="grid-2">
-                        <div class="form-group"><label class="form-label">章节编号</label><input id="chapterNo" type="number" min="1" value="1" /></div>
-                        <div class="form-group"><label class="form-label">目标字数</label><input id="lengthTarget" type="number" min="200" value="1800" /></div>
+                    <div class="write-mode-switch" role="tablist" aria-label="写作模式">
+                      <button class="write-mode-option active" type="button" data-write-mode="single" role="tab" aria-selected="true">
+                        <span class="write-mode-title">✨ 生成章节</span>
+                        <span class="write-mode-desc">按章节编号生成单章草稿</span>
+                      </button>
+                      <button class="write-mode-option" type="button" data-write-mode="auto" role="tab" aria-selected="false">
+                        <span class="write-mode-title">🚀 自动续写</span>
+                        <span class="write-mode-desc">自动规划并连续生成多章</span>
+                      </button>
+                    </div>
+                    <div class="write-panel active" id="writePanelSingle">
+                      <div class="stack">
+                        <div class="grid-2">
+                          <div class="form-group"><label class="form-label">章节编号</label><input id="chapterNo" type="number" min="1" value="1" /></div>
+                          <div class="form-group"><label class="form-label">目标字数</label><input id="lengthTarget" type="number" min="200" value="1800" /></div>
+                        </div>
+                        <div class="form-group"><label class="form-label">章节标题</label><input id="chapterTitle" type="text" placeholder="留空则自动生成" /></div>
+                        <div class="form-group"><label class="form-label">语气风格</label><input id="chapterTone" type="text" placeholder="如：紧张、温馨、悬疑（可选）" /></div>
+                        <div class="form-group"><label class="form-label">创作指令</label><textarea id="chapterInstruction" style="min-height:80px" placeholder="如：本章增加冲突，强化悬念"></textarea></div>
+                        <div class="row">
+                          <button class="btn btn-primary" id="generateBtn">✨ 开始生成</button>
+                          <button class="btn btn-secondary" id="viewOutlineBtn">📋 查看大纲</button>
+                        </div>
                       </div>
-                      <div class="form-group"><label class="form-label">章节标题</label><input id="chapterTitle" type="text" placeholder="留空则自动生成" /></div>
-                      <div class="form-group"><label class="form-label">语气风格</label><input id="chapterTone" type="text" placeholder="如：紧张、温馨、悬疑（可选）" /></div>
-                      <div class="form-group"><label class="form-label">创作指令</label><textarea id="chapterInstruction" style="min-height:80px" placeholder="如：本章增加冲突，强化悬念"></textarea></div>
-                      <div class="row">
-                        <button class="btn btn-primary" id="generateBtn">✨ 开始生成</button>
-                        <button class="btn btn-secondary" id="viewOutlineBtn">📋 查看大纲</button>
+                    </div>
+                    <div class="write-panel" id="writePanelAuto">
+                      <div class="stack">
+                        <p style="font-size:13px;color:var(--text-secondary);">AI 自动规划多个章节的情节和字数，逐章生成并确认。长章节会自动分段续写。</p>
+                        <div class="grid-2">
+                          <div class="form-group"><label class="form-label">续写章数</label><input id="autoGenCount" type="number" min="1" max="20" value="3" /></div>
+                          <div class="form-group"><label class="form-label">整体指引</label><input id="autoGenInstruction" type="text" placeholder="如：加快节奏、增加转折（可选）" /></div>
+                        </div>
+                        <div class="row" style="margin-top:4px;">
+                          <button class="btn btn-primary" id="autoGenBtn">🚀 开始自动续写</button>
+                          <button class="btn btn-danger btn-sm" id="autoGenStopBtn" style="display:none;">⏹ 停止</button>
+                        </div>
+                        <div id="autoGenProgress" style="display:none;">
+                          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
+                            <span id="autoGenStatus" style="font-size:13px;color:var(--accent);">准备中...</span>
+                            <span id="autoGenCounter" style="font-size:12px;color:var(--text-secondary);">0/0</span>
+                          </div>
+                          <div class="progress-bar-track"><div class="progress-bar-fill" id="autoGenProgressBar" style="width:0%"></div></div>
+                          <div class="auto-gen-log" id="autoGenLog"></div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -846,28 +1278,6 @@
                 <div class="card" id="chapterOutlineCard" style="display:none">
                   <div class="card-header"><h3>本章大纲</h3></div>
                   <div class="card-body"><div id="chapterOutlineState" style="font-size:13px;color:var(--text-secondary);"></div></div>
-                </div>
-                <div class="card auto-gen-card">
-                  <div class="card-header"><h3>🚀 自动续写</h3><span class="chip chip-info">批量生成</span></div>
-                  <div class="card-body">
-                    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">AI 自动规划多个章节的情节和字数，逐章生成并确认。长章节会自动分段续写。</p>
-                    <div class="grid-2">
-                      <div class="form-group"><label class="form-label">续写章数</label><input id="autoGenCount" type="number" min="1" max="20" value="3" /></div>
-                      <div class="form-group"><label class="form-label">整体指引</label><input id="autoGenInstruction" type="text" placeholder="如：加快节奏、增加转折（可选）" /></div>
-                    </div>
-                    <div class="row" style="margin-top:4px;">
-                      <button class="btn btn-primary" id="autoGenBtn">🚀 开始自动续写</button>
-                      <button class="btn btn-danger btn-sm" id="autoGenStopBtn" style="display:none;">⏹ 停止</button>
-                    </div>
-                    <div id="autoGenProgress" style="display:none;">
-                      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
-                        <span id="autoGenStatus" style="font-size:13px;color:var(--accent);">准备中...</span>
-                        <span id="autoGenCounter" style="font-size:12px;color:var(--text-secondary);">0/0</span>
-                      </div>
-                      <div class="progress-bar-track"><div class="progress-bar-fill" id="autoGenProgressBar" style="width:0%"></div></div>
-                      <div class="auto-gen-log" id="autoGenLog"></div>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -910,6 +1320,45 @@
         <div class="content-header fade-in"><h2>⚙️ 高级编辑</h2><p class="subtitle">直接编辑项目 JSON 数据（高级功能）</p></div>
         <div class="content-body fade-in">
           <div class="stack">
+            <div class="card llm-settings-card">
+              <div class="card-header"><h3>模型与 API Key</h3><span class="chip chip-info" id="llmKeyState">未加载</span></div>
+              <div class="card-body">
+                <div class="stack">
+                  <div class="grid-2">
+                    <div class="form-group">
+                      <label class="form-label">Base URL</label>
+                      <input id="llmBaseUrl" type="text" placeholder="https://api.deepseek.com/v1" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">模型</label>
+                      <input id="llmModel" type="text" list="llmModelOptions" placeholder="deepseek-chat" />
+                      <datalist id="llmModelOptions">
+                        <option value="deepseek-chat"></option>
+                        <option value="deepseek-reasoner"></option>
+                        <option value="gpt-4.1"></option>
+                        <option value="gpt-4.1-mini"></option>
+                        <option value="gpt-4o"></option>
+                        <option value="gpt-4o-mini"></option>
+                      </datalist>
+                    </div>
+                  </div>
+                  <div class="grid-2">
+                    <div class="form-group">
+                      <label class="form-label">API Key</label>
+                      <input id="llmApiKey" type="password" placeholder="留空则保留已保存的 Key；输入新 Key 会覆盖" autocomplete="off" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Max Tokens</label>
+                      <input id="llmMaxTokens" type="number" min="512" value="8192" />
+                    </div>
+                  </div>
+                  <div class="row">
+                    <button class="btn btn-primary btn-sm" id="saveLlmSettingsBtn">保存模型设置</button>
+                    <button class="btn btn-secondary btn-sm" id="clearLlmKeyBtn">清空 API Key</button>
+                  </div>
+                </div>
+              </div>
+            </div>
             <div class="tab-bar" id="fileTabs">
               <button class="tab-item active" data-file="story_brief">故事简介</button>
               <button class="tab-item" data-file="outline_draft">大纲草案</button>
@@ -938,7 +1387,9 @@
       chapterTexts: {},
       previewChapter: null,
       files: {},
+      llmSettings: {},
       generating: false,
+      suggestedChapterNo: 1,
     };
 
     const fileLabels = {
@@ -948,10 +1399,12 @@
       characters: 'characters.json',
       storyline: 'storyline.json',
       conversation_memory: 'conversation_memory.json',
+      instruction_registry: 'instruction_registry.json',
     };
 
     const editor = document.getElementById('editor');
     const storyBriefInput = document.getElementById('storyBriefInput');
+    const storyTagsInput = document.getElementById('storyTagsInput');
     const currentFileEl = document.getElementById('currentFile');
     const outlineStateEl = document.getElementById('outlineState');
     const outlineStateDot = document.getElementById('outlineStateDot');
@@ -965,6 +1418,94 @@
     }
 
     function pretty(data) { return JSON.stringify(data, null, 2); }
+
+    function parseStoryTags(text) {
+      return String(text || '')
+        .replaceAll('，', ',')
+        .replaceAll('、', ',')
+        .split(/[\n,]/)
+        .map(item => item.trim())
+        .filter(Boolean)
+        .filter((item, index, arr) => arr.indexOf(item) === index);
+    }
+
+    function getActiveStoryTags() {
+      const registryTags = state.files.instruction_registry?.story_tags || [];
+      const outline = state.files.outline || state.files.outline_draft || {};
+      const outlineTags = outline.writing_rules?.story_tags || outline.story_tags || outline.tags || [];
+      return parseStoryTags([...registryTags, ...outlineTags].join(','));
+    }
+
+    function syncStoryTagsInput(force = false) {
+      if (!storyTagsInput) return;
+      if (!force && storyTagsInput.value.trim()) return;
+      storyTagsInput.value = getActiveStoryTags().join('\n');
+    }
+
+    function splitTextList(text) {
+      return String(text || '')
+        .replaceAll('，', ',')
+        .replaceAll('、', ',')
+        .split(/[\n,]/)
+        .map(item => item.trim())
+        .filter(Boolean);
+    }
+
+    function joinTextList(value) {
+      if (Array.isArray(value)) return value.map(item => String(item || '').trim()).filter(Boolean).join('\n');
+      return String(value || '');
+    }
+
+    function outlineFieldValue(name) {
+      const el = document.querySelector(`[data-outline-field="${name}"]`);
+      return el ? el.value.trim() : '';
+    }
+
+    function outlineTextListValue(name) {
+      return splitTextList(outlineFieldValue(name));
+    }
+
+    function escapeAttr(text) {
+      return escapeHtml(text).replaceAll('"', '&quot;');
+    }
+
+    function collectOutlineForm(baseOutline) {
+      const next = JSON.parse(JSON.stringify(baseOutline || {}));
+      next.title = outlineFieldValue('title');
+      next.genre = outlineFieldValue('genre');
+      next.theme = outlineFieldValue('theme');
+      next.logline = outlineFieldValue('logline');
+      next.main_conflict = outlineFieldValue('main_conflict');
+      next.world_setting = Object.assign({}, next.world_setting || {}, {
+        time: outlineFieldValue('world.time'),
+        location: outlineFieldValue('world.location'),
+      });
+      next.writing_rules = Object.assign({}, next.writing_rules || {}, {
+        pov: outlineFieldValue('rules.pov'),
+        tone: outlineFieldValue('rules.tone'),
+        story_tags: outlineTextListValue('rules.story_tags'),
+      });
+      if (Array.isArray(next.character_seed)) {
+        next.character_seed = next.character_seed.map((character, index) => Object.assign({}, character, {
+          name: outlineFieldValue(`character.${index}.name`),
+          role: outlineFieldValue(`character.${index}.role`),
+          personality: outlineTextListValue(`character.${index}.personality`),
+          motivation: outlineFieldValue(`character.${index}.motivation`),
+          appearance: outlineFieldValue(`character.${index}.appearance`),
+        }));
+      }
+      if (Array.isArray(next.chapter_plan)) {
+        next.chapter_plan = next.chapter_plan.map((chapter, index) => Object.assign({}, chapter, {
+          title_hint: outlineFieldValue(`chapter.${index}.title_hint`),
+          tone: outlineFieldValue(`chapter.${index}.tone`),
+          goal: outlineFieldValue(`chapter.${index}.goal`),
+          must_include: outlineTextListValue(`chapter.${index}.must_include`),
+          cannot_include: outlineTextListValue(`chapter.${index}.cannot_include`),
+          instruction: outlineFieldValue(`chapter.${index}.instruction`),
+        }));
+      }
+      return next;
+    }
 
     function escapeHtml(text) {
       if (text === null || text === undefined) return '';
@@ -1068,11 +1609,32 @@
           const event = parseSseFrame(frame);
           if (event.event === 'chunk') handlers.onChunk?.(event.data);
           else if (event.event === 'meta') handlers.onMeta?.(event.data);
-          else if (event.event === 'final') { finalPayload = JSON.parse(event.data); handlers.onFinal?.(finalPayload); }
-          else if (event.event === 'error') { const err = JSON.parse(event.data); throw new Error(err.error || 'stream error'); }
+          else if (event.event === 'final' || event.event === 'done') { finalPayload = JSON.parse(event.data); handlers.onFinal?.(finalPayload); }
+          else if (event.event === 'error') { const err = JSON.parse(event.data); throw new Error(err.error || err.message || 'stream error'); }
         }
       }
       return finalPayload;
+    }
+
+    function renderLlmSettings() {
+      const settings = state.llmSettings || {};
+      const baseInput = document.getElementById('llmBaseUrl');
+      const modelInput = document.getElementById('llmModel');
+      const keyInput = document.getElementById('llmApiKey');
+      const maxInput = document.getElementById('llmMaxTokens');
+      const keyState = document.getElementById('llmKeyState');
+      if (!baseInput || !modelInput || !keyInput || !maxInput || !keyState) return;
+      baseInput.value = settings.base_url || '';
+      modelInput.value = settings.model || '';
+      maxInput.value = settings.max_tokens || 8192;
+      keyInput.value = '';
+      keyState.textContent = settings.has_api_key ? '已保存 Key' : '未保存 Key';
+      keyState.className = `chip ${settings.has_api_key ? 'chip-success' : 'chip-warning'}`;
+    }
+
+    async function loadLlmSettings() {
+      state.llmSettings = await api('/api/llm-settings', { method: 'GET' });
+      renderLlmSettings();
     }
 
     function addBubble(role, title, text = '') {
@@ -1126,6 +1688,20 @@
       else if (page === 'memory') renderMemoryPage();
     }
 
+    function setWriteMode(mode) {
+      document.querySelectorAll('.write-mode-option').forEach(btn => {
+        const active = btn.dataset.writeMode === mode;
+        btn.classList.toggle('active', active);
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      document.getElementById('writePanelSingle')?.classList.toggle('active', mode === 'single');
+      document.getElementById('writePanelAuto')?.classList.toggle('active', mode === 'auto');
+    }
+
+    document.querySelectorAll('.write-mode-option').forEach(btn => {
+      btn.addEventListener('click', () => setWriteMode(btn.dataset.writeMode || 'single'));
+    });
+
     function renderOutlinePage() {
       const confirmed = state.files.outline;
       const isConfirmed = confirmed && confirmed.confirmed_at;
@@ -1142,11 +1718,54 @@
 
       subtitle.textContent = isConfirmed ? `已确认 · ${outline.title || '未命名'}` : `草案 · ${outline.title || '未命名'}`;
       const plans = Array.isArray(outline.chapter_plan) ? outline.chapter_plan : [];
+      const writingRules = outline.writing_rules || {};
+      const worldSetting = outline.world_setting || {};
+      const characterSeeds = Array.isArray(outline.character_seed) ? outline.character_seed : [];
+      const renderTextInput = (label, name, value, placeholder = '') => `
+        <div class="form-group">
+          <label class="form-label">${escapeHtml(label)}</label>
+          <input data-outline-field="${escapeAttr(name)}" type="text" value="${escapeAttr(value || '')}" placeholder="${escapeAttr(placeholder)}" />
+        </div>`;
+      const renderTextarea = (label, name, value, minHeight = 80, placeholder = '') => `
+        <div class="form-group">
+          <label class="form-label">${escapeHtml(label)}</label>
+          <textarea data-outline-field="${escapeAttr(name)}" style="min-height:${minHeight}px" placeholder="${escapeAttr(placeholder)}">${escapeHtml(value || '')}</textarea>
+        </div>`;
+      const characterEditorHtml = characterSeeds.length > 0 ? characterSeeds.map((c, index) => `
+        <div class="card" style="background:var(--bg-surface);">
+          <div class="card-header"><h3>角色 ${index + 1}</h3><span class="chip chip-info">${escapeHtml(c.role || '角色')}</span></div>
+          <div class="card-body">
+            <div class="grid-2">
+              ${renderTextInput('姓名', `character.${index}.name`, c.name)}
+              ${renderTextInput('定位', `character.${index}.role`, c.role)}
+            </div>
+            ${renderTextarea('性格', `character.${index}.personality`, joinTextList(c.personality), 70, '每行一个性格特点')}
+            ${renderTextarea('动机', `character.${index}.motivation`, c.motivation, 70)}
+            ${renderTextarea('外貌', `character.${index}.appearance`, c.appearance, 70)}
+          </div>
+        </div>`).join('') : '<div style="color:var(--text-muted);font-size:13px;">暂无角色种子</div>';
+      const chapterEditorHtml = plans.length > 0 ? plans.map((item, index) => `
+        <div class="card" style="background:var(--bg-surface);">
+          <div class="card-header"><h3>第 ${item.chapter_no || index + 1} 章</h3></div>
+          <div class="card-body">
+            <div class="grid-2">
+              ${renderTextInput('标题提示', `chapter.${index}.title_hint`, item.title_hint || item.title || '')}
+              ${renderTextInput('语气', `chapter.${index}.tone`, item.tone || '')}
+            </div>
+            ${renderTextarea('剧情目标', `chapter.${index}.goal`, item.goal, 90)}
+            ${renderTextarea('必须包含', `chapter.${index}.must_include`, joinTextList(item.must_include), 70, '每行一个元素')}
+            ${renderTextarea('不能包含', `chapter.${index}.cannot_include`, joinTextList(item.cannot_include), 70, '每行一个元素')}
+            ${renderTextarea('章节创作指引', `chapter.${index}.instruction`, item.instruction || '', 70)}
+          </div>
+        </div>`).join('') : '<div style="color:var(--text-muted);font-size:13px;">暂无章节计划</div>';
 
       container.innerHTML = `<div class="stack">
-        <div class="row" style="gap:12px;flex-wrap:wrap;">
-          ${isConfirmed ? '<span class="chip chip-success">✓ 已确认</span>' : '<span class="chip chip-warning">草案</span>'}
+        <div class="row" style="gap:12px;flex-wrap:wrap;align-items:center;">
+          ${isConfirmed ? '<span class="chip chip-success">✓ 已确认</span>' : '<span class="chip chip-warning">草案 · 待确认</span>'}
           ${outline.genre ? `<span class="chip chip-info">${escapeHtml(outline.genre)}</span>` : ''}
+          <button class="btn btn-secondary btn-sm" id="saveOutlineInlineBtn" style="${!isConfirmed ? '' : 'margin-left:auto;'}">保存大纲</button>
+          <button class="btn btn-secondary btn-sm" id="reviseOutlineInlineBtn">AI 修改大纲</button>
+          ${!isConfirmed ? '<button class="btn btn-primary btn-sm" id="confirmOutlineBtnInline" style="margin-left:auto;">✓ 确认大纲，开始创作</button>' : ''}
         </div>
         <div class="story-meta-grid">
           ${outline.title ? `<div class="meta-item"><div class="label">标题</div><div class="value">${escapeHtml(outline.title)}</div></div>` : ''}
@@ -1156,7 +1775,112 @@
         </div>
         ${outline.logline ? `<div style="padding:16px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);line-height:1.6;font-size:14px;color:var(--text-secondary);">${escapeHtml(outline.logline)}</div>` : ''}
         ${plans.length > 0 ? `<div class="card"><div class="card-header"><h3>章节计划</h3><span class="chip chip-info">${plans.length} 章</span></div><div class="card-body" style="padding:8px 20px;">${plans.slice(0, 30).map(item => `<div class="outline-plan-item"><div class="outline-chapter-no">${item.chapter_no || '?'}</div><div class="outline-chapter-goal">${escapeHtml(item.goal || '')}</div></div>`).join('')}</div></div>` : ''}
+        <div class="card">
+          <div class="card-header"><h3>编辑大纲</h3><span class="chip chip-info">${isConfirmed ? '当前修改已确认大纲' : '当前修改大纲草案'}</span></div>
+          <div class="card-body">
+            <div class="stack">
+              <div class="grid-2">
+                ${renderTextInput('标题', 'title', outline.title)}
+                ${renderTextInput('题材', 'genre', outline.genre)}
+              </div>
+              ${renderTextarea('主题', 'theme', outline.theme, 70)}
+              ${renderTextarea('一句话简介', 'logline', outline.logline, 80)}
+              ${renderTextarea('主冲突', 'main_conflict', outline.main_conflict, 80)}
+              <div class="grid-2">
+                ${renderTextInput('世界时间', 'world.time', worldSetting.time)}
+                ${renderTextInput('世界地点', 'world.location', worldSetting.location)}
+              </div>
+              <div class="grid-2">
+                ${renderTextInput('视角', 'rules.pov', writingRules.pov)}
+                ${renderTextInput('语气风格', 'rules.tone', writingRules.tone)}
+              </div>
+              ${renderTextarea('全文 Tag', 'rules.story_tags', joinTextList(writingRules.story_tags), 80, '每行一个 tag')}
+              <div class="card" style="background:transparent;border-color:var(--border);">
+                <div class="card-header"><h3>角色种子</h3><span class="chip chip-info">${characterSeeds.length}</span></div>
+                <div class="card-body"><div class="stack">${characterEditorHtml}</div></div>
+              </div>
+              <div class="card" style="background:transparent;border-color:var(--border);">
+                <div class="card-header"><h3>章节字段</h3><span class="chip chip-info">${plans.length}</span></div>
+                <div class="card-body"><div class="stack">${chapterEditorHtml}</div></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">AI 修改要求</label>
+                <textarea id="outlineRevisionInput" style="min-height:80px" placeholder="如：把主线改得更慢热；第3章提前让女主发现线索；增加无系统、强因果的全文约束"></textarea>
+              </div>
+              <div class="row">
+                <button class="btn btn-primary btn-sm" id="saveOutlineEditorBtn">保存手工修改</button>
+                <button class="btn btn-secondary btn-sm" id="reviseOutlineEditorBtn">让 AI 修改</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>`;
+
+      // 绑定内联「确认大纲」按钮（仅在草案状态下渲染）
+      const inlineConfirmBtn = document.getElementById('confirmOutlineBtnInline');
+      if (inlineConfirmBtn) {
+        inlineConfirmBtn.addEventListener('click', () => {
+          document.getElementById('confirmOutlineBtn').click();
+        });
+      }
+      const saveOutline = async (btn) => {
+        try {
+          setLoading(btn, true);
+          const parsed = collectOutlineForm(outline);
+          const outlineText = JSON.stringify(parsed, null, 2);
+          const name = isConfirmed ? 'outline' : 'outline_draft';
+          const payload = await api('/api/save', {
+            method: 'POST',
+            body: JSON.stringify({ name, json_text: outlineText, story_brief: storyBriefInput.value.trim() }),
+          });
+          state.files[name] = parsed;
+          state.currentFile = name;
+          renderCurrentFile();
+          await loadState();
+          toast('大纲已保存', 'success');
+          setStatus('大纲已保存', 'success');
+        } catch (err) {
+          toast(`保存大纲失败：${err.message}`, 'error');
+          setStatus(`保存大纲失败：${err.message}`, 'error');
+        } finally {
+          setLoading(btn, false);
+        }
+      };
+      const reviseOutline = async (btn) => {
+        try {
+          const instruction = document.getElementById('outlineRevisionInput').value.trim();
+          if (!instruction) { toast('请输入 AI 修改要求', 'warning'); return; }
+          setLoading(btn, true);
+          setStatus('正在修改大纲...', 'warning');
+          const target = isConfirmed ? 'outline' : 'outline_draft';
+          const payload = await api('/api/revise-outline', {
+            method: 'POST',
+            body: JSON.stringify({
+              target,
+              outline_json: JSON.stringify(collectOutlineForm(outline), null, 2),
+              instruction,
+              story_brief: storyBriefInput.value.trim(),
+              story_tags: parseStoryTags(storyTagsInput.value),
+            }),
+          });
+          if (payload.outline) state.files.outline = payload.outline;
+          if (payload.outline_draft) state.files.outline_draft = payload.outline_draft;
+          if (payload.memory) state.files.conversation_memory = payload.memory;
+          state.currentFile = target;
+          await loadState();
+          toast('AI 已修改大纲', 'success');
+          setStatus('AI 已修改大纲', 'success');
+        } catch (err) {
+          toast(`AI 修改大纲失败：${err.message}`, 'error');
+          setStatus(`AI 修改大纲失败：${err.message}`, 'error');
+        } finally {
+          setLoading(btn, false);
+        }
+      };
+      document.getElementById('saveOutlineInlineBtn')?.addEventListener('click', e => saveOutline(e.currentTarget));
+      document.getElementById('saveOutlineEditorBtn')?.addEventListener('click', e => saveOutline(e.currentTarget));
+      document.getElementById('reviseOutlineInlineBtn')?.addEventListener('click', e => reviseOutline(e.currentTarget));
+      document.getElementById('reviseOutlineEditorBtn')?.addEventListener('click', e => reviseOutline(e.currentTarget));
     }
 
     const charFieldLabels = {
@@ -1295,16 +2019,16 @@
         const prevNo = curIdx > 0 ? nos[curIdx - 1] : null;
         const nextNo = curIdx < nos.length - 1 ? nos[curIdx + 1] : null;
         const navHtml = (prevNo || nextNo) ? `<div class="chapter-nav">
-          ${prevNo ? `<button class="btn btn-secondary btn-sm" onclick="selectPreviewChapter(${prevNo})">← 第${prevNo}章</button>` : '<div></div>'}
-          ${nextNo ? `<button class="btn btn-secondary btn-sm" onclick="selectPreviewChapter(${nextNo})">第${nextNo}章 →</button>` : '<div></div>'}
+          ${prevNo ? `<button class="btn btn-secondary btn-sm" onclick="selectPreviewChapterFromTail(${prevNo})">← 第${prevNo}章</button>` : '<div></div>'}
+          ${nextNo ? `<button class="btn btn-secondary btn-sm" onclick="selectPreviewChapterFromTail(${nextNo})">第${nextNo}章 →</button>` : '<div></div>'}
         </div>` : '';
 
-        textArea = `<div style="margin-bottom:12px;" class="row"><span style="font-size:18px;font-weight:700;font-family:var(--font-serif);">《${escapeHtml(cur.title)}》</span>${statusBadge}</div>${confirmBtn}<div class="chapter-text" style="margin-top:16px;">${escapeHtml(cur.text)}</div>${updatesHtml ? '<div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">' + updatesHtml + '</div>' : ''}${navHtml}`;
+        textArea = `<div id="chapterTextStart" tabindex="-1" style="margin-bottom:12px;outline:none;" class="row"><span style="font-size:18px;font-weight:700;font-family:var(--font-serif);">《${escapeHtml(cur.title)}》</span>${statusBadge}</div>${confirmBtn}<div class="chapter-text" style="margin-top:16px;">${escapeHtml(cur.text)}</div>${updatesHtml ? '<div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">' + updatesHtml + '</div>' : ''}${navHtml}`;
       } else {
         textArea = '<div style="color:var(--text-muted);font-size:14px;padding:24px 0;">请选择章节查看正文</div>';
       }
 
-      container.innerHTML = `<div class="stack">${selector}<div class="card"><div class="card-body">${textArea}</div></div></div>`;
+      container.innerHTML = `<div class="stack">${selector}<div class="card" id="chapterTextCard"><div class="card-body">${textArea}</div></div></div>`;
     }
 
     function renderMemoryPage() {
@@ -1314,11 +2038,13 @@
       const container = document.getElementById('memoryContent');
 
       const constraints = summary.confirmed_constraints || [];
+      const storyTags = getActiveStoryTags();
       const turnsHtml = turns.length > 0
         ? turns.map(t => `<div class="bubble user" style="margin-bottom:8px;"><div class="label">你的要求</div><div style="font-size:13px;line-height:1.5;">${escapeHtml(t.user)}</div></div><div class="bubble assistant" style="margin-bottom:12px;"><div class="label">AI 回应</div><div style="font-size:13px;line-height:1.5;">${escapeHtml((t.assistant || '').substring(0, 200))}${(t.assistant || '').length > 200 ? '...' : ''}</div></div>`).join('')
         : '<div style="color:var(--text-muted);font-size:13px;">暂无对话记录</div>';
 
       container.innerHTML = `<div class="stack">
+        ${storyTags.length > 0 ? `<div class="card"><div class="card-header"><h3>全文 Tag</h3><span class="chip chip-success">${storyTags.length}</span></div><div class="card-body"><div class="row">${storyTags.map(tag => `<span class="chip chip-info">${escapeHtml(tag)}</span>`).join('')}</div></div></div>` : ''}
         ${constraints.length > 0 ? `<div class="card"><div class="card-header"><h3>已确认的约束</h3><span class="chip chip-warning">${constraints.length}</span></div><div class="card-body"><ul class="preview-list">${constraints.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul></div></div>` : ''}
         <div class="card"><div class="card-header"><h3>最近对话</h3></div><div class="card-body">${turnsHtml}</div></div>
       </div>`;
@@ -1376,20 +2102,47 @@
       }
     }
 
-    function selectPreviewChapter(no) {
+    function scrollToChapterStart(retries = 2) {
+      const doScroll = () => {
+        const scroller = document.querySelector('.main-content');
+        const target = document.getElementById('chapterTextCard') || document.getElementById('chapterTextStart');
+        if (!scroller || !target) return;
+        const scrollerRect = scroller.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        const top = scroller.scrollTop + targetRect.top - scrollerRect.top;
+        scroller.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+        window.scrollTo({ top: 0, behavior: 'auto' });
+        document.getElementById('chapterTextStart')?.focus({ preventScroll: true });
+        if (retries > 0) requestAnimationFrame(() => scrollToChapterStart(retries - 1));
+      };
+      requestAnimationFrame(doScroll);
+    }
+
+    function resetChapterScrollPosition() {
+      document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'auto' });
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    }
+
+    function selectPreviewChapter(no, options = {}) {
       state.previewChapter = no;
+      const shouldScrollToStart = options.scrollToStart !== false;
+      if (shouldScrollToStart) resetChapterScrollPosition();
       if (!state.chapterTexts[no]) {
         fetch(`/api/chapter/${no}`).then(r => r.json()).then(data => {
           if (data.chapter_text) {
             state.chapterTexts[no] = chapterRecordToViewModel(no, data);
             renderChaptersPage();
-            document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+            if (shouldScrollToStart) scrollToChapterStart(options.retries ?? 3);
           }
         }).catch(() => {});
         return;
       }
       renderChaptersPage();
-      document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+      if (shouldScrollToStart) scrollToChapterStart(options.retries ?? 3);
+    }
+
+    function selectPreviewChapterFromTail(no) {
+      selectPreviewChapter(no, { scrollToStart: true, retries: 4 });
     }
 
     function renderCurrentFile() {
@@ -1447,8 +2200,12 @@
         const nextNo = nos.length > 0 ? Math.max(...nos) + 1 : 1;
         const chapterNoInput = document.getElementById('chapterNo');
         if (chapterNoInput && !state.generating) {
-          chapterNoInput.value = nextNo;
-          showChapterOutline(nextNo);
+          const currentNo = Number(chapterNoInput.value);
+          if (!chapterNoInput.value || currentNo === state.suggestedChapterNo) {
+            chapterNoInput.value = nextNo;
+          }
+          state.suggestedChapterNo = nextNo;
+          showChapterOutline(Number(chapterNoInput.value || nextNo));
         }
       }
     }
@@ -1457,9 +2214,11 @@
       setStatus('正在加载项目文件...', 'warning');
       const data = await api('/api/state', { method: 'GET' });
       state.files = data;
+      try { await loadLlmSettings(); } catch (_) {}
       if (!storyBriefInput.value.trim()) {
         storyBriefInput.value = (data.story_brief && data.story_brief.description) || '';
       }
+      syncStoryTagsInput();
       try { await syncChapterCache(); } catch (_) {}
       renderCurrentFile();
       syncFlowState();
@@ -1499,6 +2258,81 @@
       }
     });
 
+    document.getElementById('saveLlmSettingsBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('saveLlmSettingsBtn');
+      try {
+        setLoading(btn, true);
+        const payload = {
+          base_url: document.getElementById('llmBaseUrl').value.trim(),
+          model: document.getElementById('llmModel').value.trim(),
+          max_tokens: Number(document.getElementById('llmMaxTokens').value || 8192),
+        };
+        const apiKey = document.getElementById('llmApiKey').value.trim();
+        if (apiKey) payload.api_key = apiKey;
+        state.llmSettings = await api('/api/llm-settings', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        renderLlmSettings();
+        toast('模型设置已保存', 'success');
+        setStatus('模型设置已保存', 'success');
+      } catch (err) {
+        toast(`保存模型设置失败：${err.message}`, 'error');
+        setStatus(`保存模型设置失败：${err.message}`, 'error');
+      } finally {
+        setLoading(btn, false);
+      }
+    });
+
+    document.getElementById('clearLlmKeyBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('clearLlmKeyBtn');
+      try {
+        setLoading(btn, true);
+        state.llmSettings = await api('/api/llm-settings', {
+          method: 'POST',
+          body: JSON.stringify({
+            base_url: document.getElementById('llmBaseUrl').value.trim(),
+            model: document.getElementById('llmModel').value.trim(),
+            max_tokens: Number(document.getElementById('llmMaxTokens').value || 8192),
+            api_key: '',
+          }),
+        });
+        renderLlmSettings();
+        toast('API Key 已清空', 'success');
+        setStatus('API Key 已清空', 'success');
+      } catch (err) {
+        toast(`清空 API Key 失败：${err.message}`, 'error');
+        setStatus(`清空 API Key 失败：${err.message}`, 'error');
+      } finally {
+        setLoading(btn, false);
+      }
+    });
+
+    document.getElementById('saveStoryTagsBtn').addEventListener('click', async () => {
+      try {
+        const tags = parseStoryTags(storyTagsInput.value);
+        const registry = Object.assign({
+          story_tags: [],
+          global_constraints: [],
+          chapter_constraints: [],
+          style_preferences: [],
+          banned_patterns: [],
+        }, state.files.instruction_registry || {});
+        registry.story_tags = tags;
+        await api('/api/save', {
+          method: 'POST',
+          body: JSON.stringify({ name: 'instruction_registry', json_text: JSON.stringify(registry) }),
+        });
+        state.files.instruction_registry = registry;
+        renderPageContent(state.currentPage);
+        toast('全文 Tag 已保存', 'success');
+        setStatus('全文 Tag 已保存', 'success');
+      } catch (err) {
+        toast(`保存 Tag 失败：${err.message}`, 'error');
+        setStatus(`保存 Tag 失败：${err.message}`, 'error');
+      }
+    });
+
     document.getElementById('generateOutlineBtn').addEventListener('click', async () => {
       const btn = document.getElementById('generateOutlineBtn');
       try {
@@ -1513,7 +2347,7 @@
         const assistantBubble = addBubble('assistant', 'AI 创作助手', '');
         let markdownBuffer = '';
 
-        const payload = await streamApi('/api/generate-outline', { story_brief: storyBrief }, {
+        const payload = await streamApi('/api/generate-outline', { story_brief: storyBrief, story_tags: parseStoryTags(storyTagsInput.value) }, {
           onChunk: (text) => {
             markdownBuffer += parseSseChunk(text);
             if (markdownBuffer.indexOf('```json') !== -1) {
@@ -1523,7 +2357,8 @@
             }
           },
           onFinal: (finalPayload) => {
-            state.files.story_brief = { description: storyBrief, created_at: finalPayload.record?.generated_at || '', updated_at: finalPayload.record?.generated_at || '' };
+            const generatedAt = finalPayload.record?.generated_at || new Date().toISOString();
+            state.files.story_brief = { description: storyBrief, created_at: generatedAt, updated_at: generatedAt };
             applyOutlineDraft(finalPayload.outline_draft || {});
             state.files.conversation_memory = finalPayload.memory || state.files.conversation_memory;
             assistantBubble.innerHTML = '<div class="label">AI 创作助手</div><div style="line-height:1.5;font-size:13px;">大纲草案已生成！请前往「故事大纲」页面查看并确认。</div>';
@@ -1533,6 +2368,9 @@
         await loadState();
         toast('大纲草案已生成，请查看并确认', 'success');
         setStatus('大纲草案已生成，请查看并确认', 'success');
+        // 生成完成后跳转到故事大纲页面，让用户可以查看并点击「确认大纲」
+        navigateTo('outline');
+        renderOutlinePage();
       } catch (err) {
         toast(`生成大纲失败：${err.message}`, 'error');
         setStatus(`生成大纲失败：${err.message}`, 'error');
@@ -1551,7 +2389,7 @@
         if (state.currentFile !== 'outline_draft') outlineJson = JSON.stringify(state.files.outline_draft || {}, null, 2);
         const payload = await api('/api/confirm-outline', {
           method: 'POST',
-          body: JSON.stringify({ outline_json: outlineJson, story_brief: storyBriefInput.value.trim() }),
+          body: JSON.stringify({ outline_json: outlineJson, story_brief: storyBriefInput.value.trim(), story_tags: parseStoryTags(storyTagsInput.value) }),
         });
         applyConfirmedOutline(payload.outline);
         state.currentFile = 'outline';
@@ -1560,6 +2398,9 @@
         syncFlowState();
         toast('大纲已确认，可以开始生成章节', 'success');
         setStatus('大纲已确认，可以开始生成章节', 'success');
+        // 确认后跳转到「生成章节」页面
+        navigateTo('write');
+        renderOutlinePage(); // 更新大纲页面状态（移除草案按钮）
       } catch (err) {
         toast(`确认大纲失败：${err.message}`, 'error');
         setStatus(`确认大纲失败：${err.message}`, 'error');
@@ -1584,6 +2425,7 @@
         toast('正在清除所有数据...', 'info');
         streamLog.innerHTML = '';
         storyBriefInput.value = '';
+        storyTagsInput.value = '';
         document.getElementById('chapterTitle').value = '';
         document.getElementById('chapterInstruction').value = '';
         document.getElementById('chatInput').value = '';
@@ -1788,8 +2630,8 @@
 
             if (event === 'error' || event === 'chapter_error') {
               streamFailed = true;
-              addLog(`❌ 错误：${data.error || '自动续写失败'}`, 'error');
-              throw new Error(data.error || '自动续写失败');
+              addLog(`❌ 错误：${data.error || data.message || '自动续写失败'}`, 'error');
+              throw new Error(data.error || data.message || '自动续写失败');
             } else if (data.phase === 'planning') {
               statusEl.textContent = 'AI 正在规划章节...';
               addLog('📋 正在规划章节...', 'active');

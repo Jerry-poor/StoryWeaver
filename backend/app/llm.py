@@ -12,6 +12,7 @@ from backend.app.config import (
     DEEPSEEK_MODEL,
     DEEPSEEK_MAX_TOKENS,
 )
+from backend.app.storage import load_llm_settings
 
 
 def extract_json_block(text: str) -> str:
@@ -55,9 +56,14 @@ def deepseek_chat(
     temperature: float = 0.7,
     max_tokens: int = DEEPSEEK_MAX_TOKENS,
 ) -> str:
-    url = f"{DEEPSEEK_BASE_URL}/chat/completions"
+    settings = load_llm_settings()
+    base_url = settings.get("base_url") or DEEPSEEK_BASE_URL
+    model = settings.get("model") or DEEPSEEK_MODEL
+    api_key = settings.get("api_key") or DEEPSEEK_API_KEY
+    max_tokens = max_tokens or int(settings.get("max_tokens") or DEEPSEEK_MAX_TOKENS)
+    url = f"{base_url.rstrip('/')}/chat/completions"
     payload: Dict[str, Any] = {
-        "model": DEEPSEEK_MODEL,
+        "model": model,
         "messages": messages,
         "temperature": temperature,
     }
@@ -66,8 +72,8 @@ def deepseek_chat(
     headers = {
         "Content-Type": "application/json",
     }
-    if DEEPSEEK_API_KEY:
-        headers["Authorization"] = f"Bearer {DEEPSEEK_API_KEY}"
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     last_error: Optional[Exception] = None
     for attempt in range(5):
         req = request.Request(url, data=body, headers=headers, method="POST")
@@ -95,9 +101,14 @@ def deepseek_chat_stream(
     temperature: float = 0.7,
     max_tokens: int = DEEPSEEK_MAX_TOKENS,
 ) -> Any:
-    url = f"{DEEPSEEK_BASE_URL}/chat/completions"
+    settings = load_llm_settings()
+    base_url = settings.get("base_url") or DEEPSEEK_BASE_URL
+    model = settings.get("model") or DEEPSEEK_MODEL
+    api_key = settings.get("api_key") or DEEPSEEK_API_KEY
+    max_tokens = max_tokens or int(settings.get("max_tokens") or DEEPSEEK_MAX_TOKENS)
+    url = f"{base_url.rstrip('/')}/chat/completions"
     payload: Dict[str, Any] = {
-        "model": DEEPSEEK_MODEL,
+        "model": model,
         "messages": messages,
         "temperature": temperature,
         "stream": True,
@@ -108,8 +119,8 @@ def deepseek_chat_stream(
         "Content-Type": "application/json",
         "Accept": "text/event-stream",
     }
-    if DEEPSEEK_API_KEY:
-        headers["Authorization"] = f"Bearer {DEEPSEEK_API_KEY}"
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     def iterator():
         last_error: Optional[Exception] = None
         for attempt in range(5):

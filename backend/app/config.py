@@ -42,6 +42,7 @@ STORYLINE_PATH = DATA_DIR / "storyline.json"
 CONVERSATION_PATH = DATA_DIR / "conversation_memory.json"
 INSTRUCTION_REGISTRY_PATH = DATA_DIR / "instruction_registry.json"
 CONTINUITY_PATH = DATA_DIR / "continuity.json"
+LLM_SETTINGS_PATH = DATA_DIR / "llm_settings.json"
 
 SINGLE_SEGMENT_THRESHOLD = 4000
 DEFAULT_SEGMENT_TARGET_WORDS = 3000
